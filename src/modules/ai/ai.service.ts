@@ -33,16 +33,19 @@ export class AiService {
     try {
       const res = await axios.post(
         `${this.apiUrl}/chat`,
-        { messages },
+        { messages, max_tokens: 4096 },
         { timeout: 60000 },
       );
-      return (
+      // Support both OpenAI format and AI API Center envelope { success, data: { content } }
+      const content =
         res.data?.choices?.[0]?.message?.content ??
+        res.data?.data?.content ??
         res.data?.content ??
         res.data?.response ??
         res.data?.message ??
-        ''
-      );
+        '';
+      this.logger.debug(`AI response length: ${content.length} chars`);
+      return content;
     } catch (err: any) {
       this.logger.error(`AI API call failed: ${err.message}`);
       throw new InternalServerErrorException('AI service unavailable');
@@ -69,10 +72,8 @@ export class AiService {
   }) {
     const repo = await this.repoRepo.findOne({ where: { id: repoId, userId } });
     if (!repo) throw new NotFoundException('Repository not found');
-
     const pat = await this.githubTokensService.getDecryptedToken(userId);
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token กรุณาเพิ่มก่อน');
-
     const diffs = await this.fetchCommitDiffs(repo.fullName, pat, params);
     if (!diffs) {
       return { testCases: [], logId: null, model: 'default', tokensUsed: 0 };
