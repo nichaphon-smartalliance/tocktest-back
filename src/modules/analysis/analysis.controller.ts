@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
+import { Public } from '../../common/decorators/public.decorator';
 import { AnalysisService } from './analysis.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -28,6 +29,7 @@ export class AnalysisController {
   }
 
   @Post(':repoId/commits/:sha/analyze')
+  @Public()
   analyzeCommit(
     @CurrentUser() user: User,
     @Param('repoId') repoId: string,
@@ -38,6 +40,7 @@ export class AnalysisController {
   }
 
   @Post(':repoId/what-to-test')
+  @Public()
   getWhatToTest(
     @CurrentUser() user: User,
     @Param('repoId') repoId: string,

@@ -1,4 +1,5 @@
 import { Controller, Get, Put, Post, Delete, Param, Body } from '@nestjs/common';
+import { Public } from '../../common/decorators/public.decorator';
 import { DocsService } from './docs.service';
 import { UpdateDocDto } from './dto/update-doc.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -28,6 +29,7 @@ export class DocsController {
   }
 
   @Post(':repoId/docs/auto-update')
+  @Public()
   autoUpdate(@CurrentUser() user: User, @Param('repoId') repoId: string) {
     console.log('DocsController.autoUpdate called', { userId: user?.id, repoId });
     return this.service.autoUpdate(user.id, repoId);
