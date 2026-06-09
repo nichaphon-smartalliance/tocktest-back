@@ -29,11 +29,39 @@ export class AnalysisService {
     const pat = await this.githubTokensService.getDecryptedToken(userId);
 
     // Sync latest commits from GitHub if token available
+    const { page = 1, pageSize = 30, riskLevel, branch } = params;
+
+    // If branch is provided, fetch commits directly from GitHub (no local filter by branch exists)
+    if (pat && branch) {
+      const commits = await this.aiService.fetchCommits(repo.fullName, pat, {
+        since: params.fromDate,
+        until: params.toDate,
+        per_page: pageSize,
+        page,
+        branch,
+      });
+
+      const items = commits.map((c: any) => ({
+        repoId,
+        commitSha: c.sha,
+        commitMessage: c.commit?.message,
+        authorName: c.commit?.author?.name,
+        authorEmail: c.commit?.author?.email,
+        committedAt: c.commit?.author?.date ? new Date(c.commit.author.date) : null,
+        filesChanged: c.stats?.total ?? 0,
+        additions: c.stats?.additions ?? 0,
+        deletions: c.stats?.deletions ?? 0,
+        aiSummary: null,
+      }));
+
+      return toPageResult(items, items.length, page, pageSize);
+    }
+
+    // Fallback: return stored commit analyses
     if (pat) {
       await this.syncCommits(repo.fullName, repoId, pat, params);
     }
 
-    const { page = 1, pageSize = 30, riskLevel } = params;
     const qb = this.commitRepo.createQueryBuilder('c').where('c.repoId = :repoId', { repoId });
     if (riskLevel) qb.andWhere('c.riskLevel = :riskLevel', { riskLevel });
     qb.orderBy('c.committedAt', 'DESC').skip((page - 1) * pageSize).take(pageSize);
