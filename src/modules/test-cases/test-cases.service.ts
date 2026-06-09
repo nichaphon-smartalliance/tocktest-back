@@ -5,7 +5,7 @@ import { TestCase } from './entities/test-case.entity';
 import { TestCaseFolder } from './entities/test-case-folder.entity';
 import { RepositoriesService } from '../repositories/repositories.service';
 import { toPageResult } from '../../common/dto/pagination.dto';
-import type { CreateTestCaseDto, BulkSaveTestCasesDto } from './dto/create-test-case.dto';
+import type { CreateTestCaseDto, UpdateTestCaseDto, BulkSaveTestCasesDto } from './dto/create-test-case.dto';
 import type { CreateFolderDto, UpdateFolderDto } from './dto/create-folder.dto';
 
 @Injectable()
@@ -95,7 +95,7 @@ export class TestCasesService {
     return this.tcRepo.save(tc);
   }
 
-  async update(userId: string, repoId: string, id: string, dto: Partial<CreateTestCaseDto>): Promise<TestCase> {
+  async update(userId: string, repoId: string, id: string, dto: UpdateTestCaseDto): Promise<TestCase> {
     const tc = await this.findOne(userId, repoId, id);
     Object.assign(tc, dto);
     return this.tcRepo.save(tc);

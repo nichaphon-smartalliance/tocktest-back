@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { TestCasesService } from './test-cases.service';
-import { CreateTestCaseDto, BulkSaveTestCasesDto } from './dto/create-test-case.dto';
+import { CreateTestCaseDto, UpdateTestCaseDto, BulkSaveTestCasesDto } from './dto/create-test-case.dto';
 import { CreateFolderDto, UpdateFolderDto } from './dto/create-folder.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -102,7 +102,7 @@ export class TestCasesController {
     @CurrentUser() user: User,
     @Param('repoId') repoId: string,
     @Param('id') id: string,
-    @Body() dto: CreateTestCaseDto,
+    @Body() dto: UpdateTestCaseDto,
   ) {
     return this.service.update(user.id, repoId, id, dto);
   }
