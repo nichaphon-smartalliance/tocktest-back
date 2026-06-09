@@ -17,8 +17,11 @@ export class GithubTokensService {
     return this.tokenRepo.find({ where: { userId }, order: { createdAt: 'DESC' } });
   }
 
-  async create(userId: string, dto: CreateGithubTokenDto): Promise<GithubToken> {
+  async create(userId: string, dto: CreateGithubTokenDto): Promise<GithubToken> { 
+    console.log('Creating token for user0000000:', userId, 'with token:', dto.token);
+    console.log('Encrypted token for user:', userId, 'with label:', dto.label);
     const encrypted = encrypt(dto.token);
+    console.log('Encrypted token for user00001:', userId, 'with label:', dto.label);
     const token = this.tokenRepo.create({
       userId,
       label: dto.label,

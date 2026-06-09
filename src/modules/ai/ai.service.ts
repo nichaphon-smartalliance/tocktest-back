@@ -70,15 +70,20 @@ export class AiService {
     toDate?: string;
     commitShas?: string[];
   }) {
+    console.log('Generating test cases for user:', userId, 'repoId:', repoId, 'params:', params);
     const repo = await this.repoRepo.findOne({ where: { id: repoId, userId } });
     if (!repo) throw new NotFoundException('Repository not found');
+    console.log('Found repository:', repo.fullName);
     const pat = await this.githubTokensService.getDecryptedToken(userId);
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token กรุณาเพิ่มก่อน');
+    console.log('Decrypted PAT for user:', userId, 'token starts with:', pat.slice(0, 4));
     const diffs = await this.fetchCommitDiffs(repo.fullName, pat, params);
+    console.log('Fetched commit diffs for user:', userId, 'repoId:', repoId, 'diffs:', diffs);
     if (!diffs) {
+      console.log('No diffs found, returning empty test cases');
       return { testCases: [], logId: null, model: 'default', tokensUsed: 0 };
     }
-
+    console.log('Commit diffs length:', diffs.length);
     const prompt = buildTestGenerationPrompt(diffs);
     const response = await this.chat([{ role: 'user', content: prompt }]);
     const parsed = this.parseJson<any[]>(response) ?? [];

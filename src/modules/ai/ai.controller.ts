@@ -10,6 +10,7 @@ export class AiController {
 
   @Post('generate-test-cases')
   generateTestCases(@CurrentUser() user: User, @Body() dto: GenerateTestCasesDto) {
+    console.log('Received request to generate test cases for user:', user.id, 'with repoId:', dto.repoId);
     return this.aiService.generateTestCases(user.id, dto.repoId, {
       fromDate: dto.fromDate,
       toDate: dto.toDate,

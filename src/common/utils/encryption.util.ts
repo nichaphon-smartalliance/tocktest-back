@@ -13,7 +13,14 @@ function getKey(): Buffer {
 
 export function encrypt(text: string): string {
   const iv = crypto.randomBytes(IV_LENGTH);
+  console.log('IV for encryption01:', iv.toString('hex'));
+  try{
+      const test=crypto.createCipheriv(ALGORITHM, getKey(), iv);
+  }catch(e){
+    console.error('Error generating IV:', e);
+  }
   const cipher = crypto.createCipheriv(ALGORITHM, getKey(), iv);
+  console.log('IV for encryption00000000:', iv.toString('hex'));
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   return `${iv.toString('hex')}:${encrypted}`;

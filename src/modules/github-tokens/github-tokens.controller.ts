@@ -22,6 +22,7 @@ export class GithubTokensController {
 
   @Post()
   create(@CurrentUser() user: User, @Body() dto: CreateGithubTokenDto) {
+    console.log('Creating GitHub token for user:', user.id, 'with label:', dto.label);
     return this.service.create(user.id, dto);
   }
 
