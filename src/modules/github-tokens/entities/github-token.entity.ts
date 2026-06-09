@@ -36,6 +36,9 @@ export class GithubToken {
   @Column({ name: 'last_tested_at', nullable: true, type: 'timestamptz' })
   lastTestedAt: Date | null;
 
+  @Column({ name: 'expires_at', nullable: true, type: 'timestamptz' })
+  expiresAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
