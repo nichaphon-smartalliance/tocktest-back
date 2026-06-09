@@ -23,8 +23,9 @@ export class AnalysisController {
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
     @Query('riskLevel') riskLevel?: string,
+    @Query('branch') branch?: string,
   ) {
-    return this.service.getCommits(user.id, repoId, { ...pagination, fromDate, toDate, riskLevel });
+    return this.service.getCommits(user.id, repoId, { ...pagination, fromDate, toDate, riskLevel, branch });
   }
 
   @Post(':repoId/commits/:sha/analyze')

@@ -71,6 +71,19 @@ export class RepositoriesService {
     return { synced, total: githubRepos.length };
   }
 
+  async getBranches(userId: string, repoId: string): Promise<any[]> {
+    const repo = await this.findOneForUser(userId, repoId);
+    const pat = await this.githubTokensService.getDecryptedToken(userId);
+    if (!pat) throw new NotFoundException('ไม่พบ GitHub Token กรุณาเพิ่มก่อน');
+
+    const res = await axios.get(`https://api.github.com/repos/${repo.fullName}/branches`, {
+      headers: { Authorization: `token ${pat}` },
+      params: { per_page: 100 },
+    });
+    // return simplified branch list
+    return res.data.map((b: any) => ({ name: b.name, commitSha: b.commit?.sha }));
+  }
+
   private async fetchGithubRepos(pat: string): Promise<any[]> {
     const repos: any[] = [];
     let page = 1;

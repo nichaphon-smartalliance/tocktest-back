@@ -23,6 +23,7 @@ export class AnalysisService {
     fromDate?: string;
     toDate?: string;
     riskLevel?: string;
+    branch?: string;
   }) {
     const repo = await this.repoService.findOneForUser(userId, repoId);
     const pat = await this.githubTokensService.getDecryptedToken(userId);
@@ -100,6 +101,7 @@ export class AnalysisService {
     fromDate?: string;
     toDate?: string;
     page?: number;
+    branch?: string;
   }) {
     try {
       const commits = await this.aiService.fetchCommits(fullName, pat, {
@@ -107,6 +109,7 @@ export class AnalysisService {
         until: params.toDate,
         per_page: 30,
         page: params.page ?? 1,
+        branch: params.branch,
       });
 
       for (const c of commits) {

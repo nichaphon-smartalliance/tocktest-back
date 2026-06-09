@@ -176,10 +176,14 @@ export class AiService {
     until?: string;
     per_page?: number;
     page?: number;
+    branch?: string;
   }): Promise<any[]> {
+    const query: any = { per_page: params.per_page ?? 30, page: params.page ?? 1, since: params.since, until: params.until };
+    if (params.branch) query.sha = params.branch;
+
     const res = await axios.get(`https://api.github.com/repos/${fullName}/commits`, {
       headers: { Authorization: `token ${pat}` },
-      params: { per_page: params.per_page ?? 30, page: params.page ?? 1, since: params.since, until: params.until },
+      params: query,
     });
     return res.data;
   }

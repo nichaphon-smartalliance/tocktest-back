@@ -26,4 +26,14 @@ export class RepositoriesController {
   findOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.service.findOne(user.id, id);
   }
+
+  @Get(':id/branches')
+  getBranches(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.service.getBranches(user.id, id);
+  }
+
+  @Get(':id/branches')
+  getBranches(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.service.getBranches(user.id, id);
+  }
 }
