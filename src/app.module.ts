@@ -25,7 +25,7 @@ import { SettingsModule } from './modules/settings/settings.module';
         password: config.get('DB_PASSWORD', 'postgres'),
         database: config.get('DB_NAME', 'tocktest_db'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false,
+        synchronize: false, // Back to false after column is created
         logging: config.get('NODE_ENV') === 'development',
       }),
     }),
