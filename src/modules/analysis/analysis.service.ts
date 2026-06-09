@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository as TypeOrmRepo } from 'typeorm';
+import { In, Repository as TypeOrmRepo } from 'typeorm';
 import { CommitAnalysis } from './entities/commit-analysis.entity';
 import { AiService } from '../ai/ai.service';
 import { RepositoriesService } from '../repositories/repositories.service';
@@ -41,7 +41,15 @@ export class AnalysisService {
         branch,
       });
 
+      const storedAnalyses = commits.length
+        ? await this.commitRepo.find({
+            where: { repoId, commitSha: In(commits.map((c: any) => c.sha)) },
+          })
+        : [];
+      const analysisBySha = new Map(storedAnalyses.map((item) => [item.commitSha, item]));
+
       const items = commits.map((c: any) => ({
+        id: analysisBySha.get(c.sha)?.id ?? c.sha,
         repoId,
         commitSha: c.sha,
         commitMessage: c.commit?.message,
@@ -51,7 +59,9 @@ export class AnalysisService {
         filesChanged: c.stats?.total ?? 0,
         additions: c.stats?.additions ?? 0,
         deletions: c.stats?.deletions ?? 0,
-        aiSummary: null,
+        aiSummary: analysisBySha.get(c.sha)?.aiSummary ?? null,
+        riskLevel: analysisBySha.get(c.sha)?.riskLevel ?? null,
+        analyzedAt: analysisBySha.get(c.sha)?.analyzedAt ?? null,
       }));
 
       return toPageResult(items, items.length, page, pageSize);
@@ -112,13 +122,49 @@ export class AnalysisService {
   }
 
   async getWhatToTest(userId: string, repoId: string, commitShas: string[]) {
-    await this.repoService.findOneForUser(userId, repoId);
+    const repo = await this.repoService.findOneForUser(userId, repoId);
 
     const commits = await this.commitRepo.find({
       where: commitShas.map((sha) => ({ repoId, commitSha: sha })),
     });
+    const commitBySha = new Map(commits.map((commit) => [commit.commitSha, commit]));
 
-    const commitsData = commits
+    const missingShas = commitShas.filter((sha) => !commitBySha.has(sha));
+    const pat = missingShas.length ? await this.githubTokensService.getDecryptedToken(userId) : null;
+
+    if (pat) {
+      for (const sha of missingShas.slice(0, 10)) {
+        try {
+          const detail = await this.aiService.fetchCommitDetail(repo.fullName, pat, sha);
+          commitBySha.set(sha, {
+            repoId,
+            commitSha: sha,
+            commitMessage: detail.commit?.message ?? null,
+            authorName: detail.commit?.author?.name ?? null,
+            authorEmail: detail.commit?.author?.email ?? null,
+            committedAt: detail.commit?.author?.date ? new Date(detail.commit.author.date) : null,
+            filesChanged: detail.stats?.total ?? 0,
+            additions: detail.stats?.additions ?? 0,
+            deletions: detail.stats?.deletions ?? 0,
+            aiSummary: null,
+            riskLevel: null,
+            analyzedAt: null,
+            rawData: null,
+          } as CommitAnalysis);
+        } catch {
+          commitBySha.set(sha, {
+            repoId,
+            commitSha: sha,
+            commitMessage: null,
+            aiSummary: null,
+          } as CommitAnalysis);
+        }
+      }
+    }
+
+    const commitsData = commitShas
+      .map((sha) => commitBySha.get(sha))
+      .filter((commit): commit is CommitAnalysis => !!commit)
       .map((c) => `[${c.commitSha.slice(0, 7)}] ${c.commitMessage}\nSummary: ${c.aiSummary ?? 'N/A'}`)
       .join('\n\n');
 

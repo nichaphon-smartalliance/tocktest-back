@@ -27,9 +27,9 @@ export class DocsController {
     return this.service.updateDoc(user.id, repoId, dto.content);
   }
 
+  @Post(':repoId/docs/auto-update')
   autoUpdate(@CurrentUser() user: User, @Param('repoId') repoId: string) {
     if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
-    console.log('DocsController.autoUpdate called', { userId: user.id, repoId });
     return this.service.autoUpdate(user.id, repoId);
   }
 

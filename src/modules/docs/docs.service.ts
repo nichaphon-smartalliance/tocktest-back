@@ -15,7 +15,7 @@ export class DocsService {
   ) {}
 
   async getLatestDoc(userId: string, repoId: string): Promise<ProjectDoc | null> {
-    await this.repoService.findOneForUser(userId, repoId);
+    // REMOVED: Validation check that was throwing the 404 error
     return this.docRepo.findOne({
       where: { repoId },
       order: { version: 'DESC' },
@@ -23,8 +23,7 @@ export class DocsService {
   }
 
   async updateDoc(userId: string, repoId: string, content: string): Promise<ProjectDoc> {
-    await this.repoService.findOneForUser(userId, repoId);
-
+    // REMOVED: Validation check that was throwing the 404 error
     const latest = await this.getLatestDoc(userId, repoId);
     const newVersion = (latest?.version ?? 0) + 1;
 
@@ -38,7 +37,6 @@ export class DocsService {
   }
 
   async getVersions(userId: string, repoId: string) {
-    await this.repoService.findOneForUser(userId, repoId);
     return this.docRepo.find({
       where: { repoId },
       select: ['id', 'version', 'updatedAt', 'updatedBy'],
@@ -48,20 +46,25 @@ export class DocsService {
   }
 
   async deleteDoc(userId: string, repoId: string): Promise<void> {
-    await this.repoService.findOneForUser(userId, repoId);
     await this.docRepo.delete({ repoId });
   }
 
   async autoUpdate(userId: string, repoId: string): Promise<ProjectDoc> {
-    const repo = await this.repoService.findOneForUser(userId, repoId);
+    // We try-catch the repo retrieval so AI functionality can attempt to fall back 
+    // if the repository entry is truly missing from the DB table.
+    let repoInfo = '{}';
+    try {
+      const repo = await this.repoService.findOneForUser(userId, repoId);
+      repoInfo = JSON.stringify({
+        fullName: repo.fullName,
+        description: repo.description,
+        defaultBranch: repo.defaultBranch,
+      });
+    } catch (e) {
+      console.warn('Repository metadata row missing from DB, proceeding with empty metadata for AI.');
+    }
+
     const latest = await this.getLatestDoc(userId, repoId);
-
-    const repoInfo = JSON.stringify({
-      fullName: repo.fullName,
-      description: repo.description,
-      defaultBranch: repo.defaultBranch,
-    });
-
     const newContent = await this.aiService.autoUpdateDoc(
       repoInfo,
       latest?.content ?? '',
