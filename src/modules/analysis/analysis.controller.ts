@@ -27,6 +27,7 @@ export class AnalysisController {
     return this.service.getCommits(user.id, repoId, { ...pagination, fromDate, toDate, riskLevel });
   }
 
+  @Post(':repoId/commits/:sha/analyze')
   analyzeCommit(
     @CurrentUser() user: User,
     @Param('repoId') repoId: string,
@@ -37,6 +38,7 @@ export class AnalysisController {
     return this.service.analyzeCommit(user.id, repoId, sha);
   }
 
+  @Post(':repoId/what-to-test')
   getWhatToTest(
     @CurrentUser() user: User,
     @Param('repoId') repoId: string,
