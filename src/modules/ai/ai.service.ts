@@ -3,6 +3,23 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository as TypeOrmRepo } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+const fetchWhatToTest = async (repositoryId: string) => {
+  try {
+    const response = await axios.post(`http://localhost:4004/api/v1/repositories/${repositoryId}/what-to-test`);
+    return response.data;
+  } catch (error) {
+    // 1. Check if the error is specifically an Axios error
+    if (axios.isAxiosError(error)) {
+      // TypeScript now safely knows 'error' has response, message, etc.
+      console.error("API call failed:", error.response?.data || error.message);
+      alert(`Error: ${error.response?.data?.message || "Something went wrong"}`);
+    } else {
+      // 2. Handle non-Axios errors (like network dropouts or native JS crashes)
+      console.error("An unexpected error occurred:", error);
+      alert("An unexpected network error occurred.");
+    }
+  }
+};
 import { Repository } from '../repositories/entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
 import { buildTestGenerationPrompt, buildCommitAnalysisPrompt, buildWhatToTestPrompt, buildDocUpdatePrompt } from './prompts';
