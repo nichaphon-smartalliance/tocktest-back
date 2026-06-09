@@ -1,5 +1,4 @@
-import { Controller, Get, Post, Param, Query, Body } from '@nestjs/common';
-import { Public } from '../../common/decorators/public.decorator';
+import { Controller, Get, Post, Param, Query, Body, UnauthorizedException } from '@nestjs/common';
 import { AnalysisService } from './analysis.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -28,25 +27,23 @@ export class AnalysisController {
     return this.service.getCommits(user.id, repoId, { ...pagination, fromDate, toDate, riskLevel });
   }
 
-  @Post(':repoId/commits/:sha/analyze')
-  @Public()
   analyzeCommit(
     @CurrentUser() user: User,
     @Param('repoId') repoId: string,
     @Param('sha') sha: string,
   ) {
-    console.log('AnalysisController.analyzeCommit called', { userId: user?.id, repoId, sha });
+    if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
+    console.log('AnalysisController.analyzeCommit called', { userId: user.id, repoId, sha });
     return this.service.analyzeCommit(user.id, repoId, sha);
   }
 
-  @Post(':repoId/what-to-test')
-  @Public()
   getWhatToTest(
     @CurrentUser() user: User,
     @Param('repoId') repoId: string,
     @Body() dto: WhatToTestDto,
   ) {
-    console.log('AnalysisController.getWhatToTest called', { userId: user?.id, repoId, commits: dto.commitShas?.length });
+    if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
+    console.log('AnalysisController.getWhatToTest called', { userId: user.id, repoId, commits: dto.commitShas?.length });
     return this.service.getWhatToTest(user.id, repoId, dto.commitShas);
   }
 }
