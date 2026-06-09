@@ -47,6 +47,11 @@ export class DocsService {
     });
   }
 
+  async deleteDoc(userId: string, repoId: string): Promise<void> {
+    await this.repoService.findOneForUser(userId, repoId);
+    await this.docRepo.delete({ repoId });
+  }
+
   async autoUpdate(userId: string, repoId: string): Promise<ProjectDoc> {
     const repo = await this.repoService.findOneForUser(userId, repoId);
     const latest = await this.getLatestDoc(userId, repoId);

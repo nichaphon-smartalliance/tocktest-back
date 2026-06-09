@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Param, Body } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Param, Body } from '@nestjs/common';
 import { DocsService } from './docs.service';
 import { UpdateDocDto } from './dto/update-doc.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -29,6 +29,12 @@ export class DocsController {
 
   @Post(':repoId/docs/auto-update')
   autoUpdate(@CurrentUser() user: User, @Param('repoId') repoId: string) {
+    console.log('DocsController.autoUpdate called', { userId: user?.id, repoId });
     return this.service.autoUpdate(user.id, repoId);
+  }
+
+  @Delete(':repoId/docs')
+  deleteDoc(@CurrentUser() user: User, @Param('repoId') repoId: string) {
+    return this.service.deleteDoc(user.id, repoId);
   }
 }

@@ -33,6 +33,7 @@ export class AnalysisController {
     @Param('repoId') repoId: string,
     @Param('sha') sha: string,
   ) {
+    console.log('AnalysisController.analyzeCommit called', { userId: user?.id, repoId, sha });
     return this.service.analyzeCommit(user.id, repoId, sha);
   }
 
@@ -42,6 +43,7 @@ export class AnalysisController {
     @Param('repoId') repoId: string,
     @Body() dto: WhatToTestDto,
   ) {
+    console.log('AnalysisController.getWhatToTest called', { userId: user?.id, repoId, commits: dto.commitShas?.length });
     return this.service.getWhatToTest(user.id, repoId, dto.commitShas);
   }
 }
