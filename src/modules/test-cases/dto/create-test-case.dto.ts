@@ -5,7 +5,9 @@ import {
   IsArray,
   IsIn,
   IsBoolean,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 const TEST_TYPES = ['manual', 'automated', 'ui', 'api', 'integration'] as const;
 const TEST_STATUSES = ['pass', 'fail', 'blocked', 'not_tested'] as const;
@@ -102,5 +104,7 @@ export class UpdateTestCaseDto {
 
 export class BulkSaveTestCasesDto {
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateTestCaseDto)
   testCases: CreateTestCaseDto[];
 }

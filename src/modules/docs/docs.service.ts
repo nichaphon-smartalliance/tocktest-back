@@ -22,10 +22,9 @@ export class DocsService {
     });
   }
 
-  async updateDoc(userId: string, repoId: string, content: string): Promise<ProjectDoc> {
+  async updateDoc(userId: string, repoId: string, content: string, latestVersion?: number): Promise<ProjectDoc> {
     await this.repoService.findOneForUser(userId, repoId);
-    const latest = await this.getLatestDoc(userId, repoId);
-    const newVersion = (latest?.version ?? 0) + 1;
+    const newVersion = (latestVersion ?? (await this.getLatestDocVersion(repoId))) + 1;
 
     const doc = this.docRepo.create({
       repoId,
@@ -34,6 +33,15 @@ export class DocsService {
       updatedBy: userId,
     });
     return this.docRepo.save(doc);
+  }
+
+  private async getLatestDocVersion(repoId: string): Promise<number> {
+    const latest = await this.docRepo.findOne({
+      where: { repoId },
+      select: ['version'],
+      order: { version: 'DESC' },
+    });
+    return latest?.version ?? 0;
   }
 
   async getVersions(userId: string, repoId: string) {
@@ -52,26 +60,19 @@ export class DocsService {
   }
 
   async autoUpdate(userId: string, repoId: string): Promise<ProjectDoc> {
-    // We try-catch the repo retrieval so AI functionality can attempt to fall back 
-    // if the repository entry is truly missing from the DB table.
-    let repoInfo = '{}';
-    try {
-      const repo = await this.repoService.findOneForUser(userId, repoId);
-      repoInfo = JSON.stringify({
-        fullName: repo.fullName,
-        description: repo.description,
-        defaultBranch: repo.defaultBranch,
-      });
-    } catch (e) {
-      console.warn('Repository metadata row missing from DB, proceeding with empty metadata for AI.');
-    }
+    const repo = await this.repoService.findOneForUser(userId, repoId);
+    const repoInfo = JSON.stringify({
+      fullName: repo.fullName,
+      description: repo.description,
+      defaultBranch: repo.defaultBranch,
+    });
 
-    const latest = await this.getLatestDoc(userId, repoId);
-    const newContent = await this.aiService.autoUpdateDoc(
-      repoInfo,
-      latest?.content ?? '',
-    );
+    const latest = await this.docRepo.findOne({
+      where: { repoId },
+      order: { version: 'DESC' },
+    });
+    const newContent = await this.aiService.autoUpdateDoc(repoInfo, latest?.content ?? '');
 
-    return this.updateDoc(userId, repoId, newContent);
+    return this.updateDoc(userId, repoId, newContent, latest?.version ?? 0);
   }
 }

@@ -37,7 +37,7 @@ export class AnalysisService {
       const commits = await this.aiService.fetchCommits(repo.fullName, pat, {
         since: params.fromDate,
         until: params.toDate,
-        per_page: pageSize,
+        per_page: pageSize + 1,
         page,
         branch,
       });
@@ -65,21 +65,22 @@ export class AnalysisService {
         analyzedAt: analysisBySha.get(c.sha)?.analyzedAt ?? null,
       }));
 
-      return toPageResult(
-        items,
-        commits.length < pageSize ? (page - 1) * pageSize + commits.length : page * pageSize + 1,
-        page,
-        pageSize,
-      );
+      // Fetch pageSize+1 to detect if more pages exist without guessing the total
+      const hasMore = commits.length === pageSize + 1;
+      const pageItems = hasMore ? items.slice(0, pageSize) : items;
+      const total = (page - 1) * pageSize + pageItems.length + (hasMore ? 1 : 0);
+      return toPageResult(pageItems, total, page, pageSize);
     }
 
-    // Fallback: return stored commit analyses
-    if (pat) {
+    // Fallback: return stored commit analyses (sync page 1 only to avoid rate-limit exhaustion)
+    if (pat && page === 1) {
       await this.syncCommits(repo.fullName, repoId, pat, params);
     }
 
     const qb = this.commitRepo.createQueryBuilder('c').where('c.repoId = :repoId', { repoId });
     if (riskLevel) qb.andWhere('c.riskLevel = :riskLevel', { riskLevel });
+    if (params.fromDate) qb.andWhere('c.committedAt >= :from', { from: new Date(params.fromDate) });
+    if (params.toDate) qb.andWhere('c.committedAt <= :to', { to: new Date(params.toDate) });
     qb.orderBy('c.committedAt', 'DESC').skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
@@ -113,7 +114,7 @@ export class AnalysisService {
       commitMessage: commitDetail.commit?.message,
       authorName: commitDetail.commit?.author?.name,
       authorEmail: commitDetail.commit?.author?.email,
-      committedAt: new Date(commitDetail.commit?.author?.date),
+      committedAt: commitDetail.commit?.author?.date ? new Date(commitDetail.commit.author.date) : null,
       filesChanged: commitDetail.stats?.total ?? 0,
       additions: commitDetail.stats?.additions ?? 0,
       deletions: commitDetail.stats?.deletions ?? 0,
@@ -187,7 +188,6 @@ export class AnalysisService {
   private async syncCommits(fullName: string, repoId: string, pat: string, params: {
     fromDate?: string;
     toDate?: string;
-    page?: number;
     branch?: string;
   }) {
     try {
@@ -195,7 +195,7 @@ export class AnalysisService {
         since: params.fromDate,
         until: params.toDate,
         per_page: 30,
-        page: params.page ?? 1,
+        page: 1,
         branch: params.branch,
       });
 
@@ -206,7 +206,7 @@ export class AnalysisService {
           commitMessage: c.commit?.message,
           authorName: c.commit?.author?.name,
           authorEmail: c.commit?.author?.email,
-          committedAt: new Date(c.commit?.author?.date),
+          committedAt: c.commit?.author?.date ? new Date(c.commit.author.date) : null,
           filesChanged: c.stats?.total ?? 0,
           additions: c.stats?.additions ?? 0,
           deletions: c.stats?.deletions ?? 0,

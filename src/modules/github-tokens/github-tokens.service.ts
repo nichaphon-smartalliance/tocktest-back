@@ -66,8 +66,8 @@ export class GithubTokensService {
     return decrypt(token.tokenEncrypted);
   }
 
-  async getDecryptedTokenById(tokenId: string): Promise<string | null> {
-    const token = await this.tokenRepo.findOne({ where: { id: tokenId } });
+  async getDecryptedTokenById(userId: string, tokenId: string): Promise<string | null> {
+    const token = await this.tokenRepo.findOne({ where: { id: tokenId, userId } });
     if (!token) return null;
     return decrypt(token.tokenEncrypted);
   }
