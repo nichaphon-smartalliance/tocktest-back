@@ -11,6 +11,7 @@ import { DocsModule } from './modules/docs/docs.module';
 import { AiModule } from './modules/ai/ai.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { GithubAppModule } from './modules/github-app/github-app.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     AiModule,
     SettingsModule,
     DashboardModule,
+    GithubAppModule,
   ],
 })
 export class AppModule {}

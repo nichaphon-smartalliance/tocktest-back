@@ -7,7 +7,7 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor'
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const dataSource = app.get(DataSource);
   await ensureGithubTokenExpiresAt(dataSource);
 

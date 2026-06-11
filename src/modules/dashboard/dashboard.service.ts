@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository as TypeOrmRepo, In } from 'typeorm';
 import { Repository } from '../repositories/entities/repository.entity';
@@ -13,6 +14,7 @@ export class DashboardService {
     @InjectRepository(TestCase)
     private readonly tcRepo: TypeOrmRepo<TestCase>,
     private readonly githubTokensService: GithubTokensService,
+    private readonly config: ConfigService,
   ) {}
 
   async getQaSummary(userId: string) {
@@ -135,6 +137,12 @@ export class DashboardService {
     const hasRepos = input.totalRepos > 0;
     const hasGeneratedTests = input.aiGeneratedCount > 0;
     const hasAnyTests = input.totalTestCases > 0;
+    const githubAppConfigured =
+      !!this.config.get<string>('GITHUB_APP_ID') &&
+      !!this.config.get<string>('GITHUB_APP_PRIVATE_KEY');
+    const webhookConfigured = !!this.config.get<string>('GITHUB_WEBHOOK_SECRET');
+    const installUrlConfigured =
+      !!this.config.get<string>('GITHUB_APP_INSTALL_URL') || !!this.config.get<string>('GITHUB_APP_NAME');
 
     return [
       {
@@ -174,14 +182,18 @@ export class DashboardService {
       {
         key: 'github_app',
         label: 'GitHub App install',
-        status: 'missing',
-        description: 'GitHub App permissions, installation flow, PR status checks, and review-comment writeback are still missing.',
+        status: githubAppConfigured || installUrlConfigured ? 'partial' : 'missing',
+        description: githubAppConfigured || installUrlConfigured
+          ? 'GitHub App setup has started, but installation callbacks, PR checks, and review-comment writeback are not finished yet.'
+          : 'GitHub App permissions, installation flow, PR status checks, and review-comment writeback are still missing.',
       },
       {
         key: 'webhook_automation',
         label: 'Webhook-triggered QA automation',
-        status: 'missing',
-        description: 'There is no webhook listener yet for push, pull_request, or merge events.',
+        status: webhookConfigured ? 'partial' : 'missing',
+        description: webhookConfigured
+          ? 'Signed GitHub webhook intake is configured, but event-driven QA jobs are not running yet.'
+          : 'There is no webhook listener configuration yet for push, pull_request, or merge events.',
       },
       {
         key: 'pr_reviewer',
