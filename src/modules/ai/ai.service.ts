@@ -102,7 +102,7 @@ export class AiService {
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token กรุณาเพิ่มก่อน');
     const diffs = await this.fetchCommitDiffs(repo.fullName, pat, params);
     if (!diffs) {
-      return { testCases: [], logId: null, model: 'default', tokensUsed: 0 };
+      throw new InternalServerErrorException('ไม่พบ commit ที่สามารถวิเคราะห์ได้ในช่วงเวลาที่เลือก');
     }
     const prompt = buildTestGenerationPrompt(diffs);
     const response = await this.chat([{ role: 'user', content: prompt }]);
@@ -197,6 +197,7 @@ export class AiService {
         const res = await axios.get(`https://api.github.com/repos/${fullName}/commits`, {
           headers: { Authorization: `token ${pat}` },
           params: { since: params.fromDate, until: params.toDate, per_page: 10 },
+          timeout: 10000,
         });
         shas = res.data.map((c: any) => c.sha);
       }
@@ -205,7 +206,7 @@ export class AiService {
       for (const sha of shas.slice(0, 5)) {
         const res = await axios.get(
           `https://api.github.com/repos/${fullName}/commits/${sha}`,
-          { headers: { Authorization: `token ${pat}`, Accept: 'application/vnd.github.v3.diff' } },
+          { headers: { Authorization: `token ${pat}`, Accept: 'application/vnd.github.v3.diff' }, timeout: 10000 },
         );
         diffs.push(`--- Commit ${sha} ---\n${res.data}`);
       }
