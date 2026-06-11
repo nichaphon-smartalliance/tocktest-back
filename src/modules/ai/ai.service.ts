@@ -7,6 +7,7 @@ import { Repository } from '../repositories/entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
 import { buildTestGenerationPrompt, buildCommitAnalysisPrompt, buildWhatToTestPrompt, buildDocUpdatePrompt } from './prompts';
 import { normalizePriority, normalizeRiskLevel, normalizeTestType } from '../../common/utils/normalize-ai';
+import { heuristicAnalyzeCommit, heuristicWhatToTest } from '../../common/utils/heuristic-ai';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -16,6 +17,8 @@ interface ChatMessage {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
+  private availCache: { ts: number; ok: boolean } | null = null;
+  private readonly AVAIL_TTL_MS = 60_000;
 
   constructor(
     private readonly config: ConfigService,
@@ -30,28 +33,29 @@ export class AiService {
 
   // ── Core AI chat ──────────────────────────────────────────────────────
 
-  /** Lightweight availability probe for the UI. */
-  async healthCheck(): Promise<{ available: boolean }> {
+  /** Cached probe — avoids repeated 3s timeouts when AI is down. */
+  async isAvailable(): Promise<boolean> {
+    if (this.availCache && Date.now() - this.availCache.ts < this.AVAIL_TTL_MS) {
+      return this.availCache.ok;
+    }
     try {
-      await axios.get(this.apiUrl, { timeout: 3000, validateStatus: () => true });
-      return { available: true };
+      await axios.get(this.apiUrl, { timeout: 2000, validateStatus: () => true });
+      this.availCache = { ts: Date.now(), ok: true };
+      return true;
     } catch {
-      return { available: false };
+      this.availCache = { ts: Date.now(), ok: false };
+      return false;
     }
   }
 
-  /** Fast reachability check so a dead AI server fails in ~3s instead of hanging the request. */
-  private async ensureReachable(): Promise<void> {
-    try {
-      await axios.get(this.apiUrl, { timeout: 3000, validateStatus: () => true });
-    } catch {
-      this.logger.error(`AI API unreachable at ${this.apiUrl}`);
-      throw new InternalServerErrorException('AI service unavailable');
-    }
+  async healthCheck(): Promise<{ available: boolean }> {
+    return { available: await this.isAvailable() };
   }
 
   async chat(messages: ChatMessage[]): Promise<string> {
-    await this.ensureReachable();
+    if (!(await this.isAvailable())) {
+      throw new InternalServerErrorException('AI service unavailable');
+    }
     try {
       const res = await axios.post(
         `${this.apiUrl}/chat`,
@@ -126,6 +130,10 @@ export class AiService {
   // ── Commit Analysis ───────────────────────────────────────────────────
 
   async analyzeCommit(commitData: string) {
+    if (!(await this.isAvailable())) {
+      this.logger.warn('AI offline — using heuristic commit analysis');
+      return heuristicAnalyzeCommit(commitData);
+    }
     const prompt = buildCommitAnalysisPrompt(commitData);
     const response = await this.chat([{ role: 'user', content: prompt }]);
     const parsed = this.parseJson<{
@@ -147,6 +155,10 @@ export class AiService {
   // ── What To Test ──────────────────────────────────────────────────────
 
   async getWhatToTest(commitsData: string) {
+    if (!(await this.isAvailable())) {
+      this.logger.warn('AI offline — using heuristic what-to-test');
+      return heuristicWhatToTest(commitsData);
+    }
     const prompt = buildWhatToTestPrompt(commitsData);
     const response = await this.chat([{ role: 'user', content: prompt }]);
     const parsed = this.parseJson<{

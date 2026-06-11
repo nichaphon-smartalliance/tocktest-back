@@ -34,13 +34,15 @@ export class AnalysisService {
 
     // If branch is provided, fetch commits directly from GitHub (no local filter by branch exists)
     if (pat && branch) {
-      const commits = await this.aiService.fetchCommits(repo.fullName, pat, {
+      const rawCommits = await this.aiService.fetchCommits(repo.fullName, pat, {
         since: params.fromDate,
         until: params.toDate,
-        per_page: pageSize,
+        per_page: pageSize + 1,
         page,
         branch,
       });
+      const hasMore = rawCommits.length > pageSize;
+      const commits = hasMore ? rawCommits.slice(0, pageSize) : rawCommits;
 
       const storedAnalyses = commits.length
         ? await this.commitRepo.find({
@@ -49,33 +51,34 @@ export class AnalysisService {
         : [];
       const analysisBySha = new Map(storedAnalyses.map((item) => [item.commitSha, item]));
 
-      const items = commits.map((c: any) => ({
-        id: analysisBySha.get(c.sha)?.id ?? c.sha,
-        repoId,
-        commitSha: c.sha,
-        commitMessage: c.commit?.message,
-        authorName: c.commit?.author?.name,
-        authorEmail: c.commit?.author?.email,
-        committedAt: c.commit?.author?.date ? new Date(c.commit.author.date) : null,
-        filesChanged: c.stats?.total ?? 0,
-        additions: c.stats?.additions ?? 0,
-        deletions: c.stats?.deletions ?? 0,
-        aiSummary: analysisBySha.get(c.sha)?.aiSummary ?? null,
-        riskLevel: analysisBySha.get(c.sha)?.riskLevel ?? null,
-        analyzedAt: analysisBySha.get(c.sha)?.analyzedAt ?? null,
-      }));
+      const items = commits.map((c: any) => {
+        const stored = analysisBySha.get(c.sha);
+        return {
+          id: stored?.id ?? c.sha,
+          repoId,
+          commitSha: c.sha,
+          commitMessage: c.commit?.message,
+          authorName: c.commit?.author?.name,
+          authorEmail: c.commit?.author?.email,
+          committedAt: c.commit?.author?.date ? new Date(c.commit.author.date) : null,
+          filesChanged: stored?.filesChanged ?? c.stats?.total ?? 0,
+          additions: stored?.additions ?? c.stats?.additions ?? 0,
+          deletions: stored?.deletions ?? c.stats?.deletions ?? 0,
+          aiSummary: stored?.aiSummary ?? null,
+          riskLevel: stored?.riskLevel ?? null,
+          analyzedAt: stored?.analyzedAt ?? null,
+        };
+      });
 
-      return toPageResult(
-        items,
-        commits.length < pageSize ? (page - 1) * pageSize + commits.length : page * pageSize + 1,
-        page,
-        pageSize,
-      );
+      const total = (page - 1) * pageSize + items.length + (hasMore ? 1 : 0);
+      return toPageResult(items, total, page, pageSize);
     }
 
-    // Fallback: read stored analyses only (no GitHub sync on every list — that was blocking the API)
+    // Fallback: stored analyses (used when no branch selected or no PAT)
     const qb = this.commitRepo.createQueryBuilder('c').where('c.repoId = :repoId', { repoId });
     if (riskLevel) qb.andWhere('c.riskLevel = :riskLevel', { riskLevel });
+    if (params.fromDate) qb.andWhere('c.committedAt >= :from', { from: new Date(params.fromDate) });
+    if (params.toDate) qb.andWhere('c.committedAt <= :to', { to: new Date(params.toDate) });
     qb.orderBy('c.committedAt', 'DESC').skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();
@@ -109,7 +112,7 @@ export class AnalysisService {
       commitMessage: commitDetail.commit?.message,
       authorName: commitDetail.commit?.author?.name,
       authorEmail: commitDetail.commit?.author?.email,
-      committedAt: new Date(commitDetail.commit?.author?.date),
+      committedAt: commitDetail.commit?.author?.date ? new Date(commitDetail.commit.author.date) : null,
       filesChanged: commitDetail.stats?.total ?? 0,
       additions: commitDetail.stats?.additions ?? 0,
       deletions: commitDetail.stats?.deletions ?? 0,
@@ -183,7 +186,6 @@ export class AnalysisService {
   private async syncCommits(fullName: string, repoId: string, pat: string, params: {
     fromDate?: string;
     toDate?: string;
-    page?: number;
     branch?: string;
   }) {
     try {
@@ -191,7 +193,7 @@ export class AnalysisService {
         since: params.fromDate,
         until: params.toDate,
         per_page: 30,
-        page: params.page ?? 1,
+        page: 1,
         branch: params.branch,
       });
 
@@ -202,7 +204,7 @@ export class AnalysisService {
           commitMessage: c.commit?.message,
           authorName: c.commit?.author?.name,
           authorEmail: c.commit?.author?.email,
-          committedAt: new Date(c.commit?.author?.date),
+          committedAt: c.commit?.author?.date ? new Date(c.commit.author.date) : null,
           filesChanged: c.stats?.total ?? 0,
           additions: c.stats?.additions ?? 0,
           deletions: c.stats?.deletions ?? 0,

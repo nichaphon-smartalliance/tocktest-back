@@ -15,7 +15,7 @@ export class RepositoriesService {
   ) {}
 
   async findAll(userId: string, params: { search?: string; page?: number; pageSize?: number }) {
-    const { search, page = 1, pageSize = 20 } = params;
+    const { search, page = 1, pageSize = 100 } = params;
     const where: any = { userId };
     if (search) where.fullName = ILike(`%${search}%`);
 
