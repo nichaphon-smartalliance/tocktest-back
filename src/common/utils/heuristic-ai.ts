@@ -40,6 +40,7 @@ export function heuristicAnalyzeCommit(commitData: string) {
     riskLevel,
     testSuggestions: ['ทดสอบ flow หลักที่เกี่ยวข้องกับไฟล์ที่แก้ไข', 'ตรวจ regression ในส่วนที่มีการเปลี่ยนแปลงมาก'],
     affectedAreas: files > 0 ? ['ไฟล์ที่แก้ไขใน commit'] : [],
+    source: 'heuristic' as const,
   };
 }
 
@@ -53,5 +54,6 @@ export function heuristicWhatToTest(commitsData: string) {
     ],
     priority: 'medium' as const,
     reasoning: 'AI server ไม่พร้อม — ใช้คำแนะนำพื้นฐานจากข้อมูล commit',
+    source: 'heuristic' as const,
   };
 }

@@ -149,6 +149,7 @@ export class AiService {
       riskLevel: normalizeRiskLevel(result.riskLevel),
       testSuggestions: Array.isArray(result.testSuggestions) ? result.testSuggestions : [],
       affectedAreas: Array.isArray(result.affectedAreas) ? result.affectedAreas : [],
+      source: 'ai' as const,
     };
   }
 
@@ -172,6 +173,7 @@ export class AiService {
       recommendations: Array.isArray(result.recommendations) ? result.recommendations : [response],
       priority: normalizePriority(result.priority),
       reasoning: result.reasoning ?? '',
+      source: 'ai' as const,
     };
   }
 

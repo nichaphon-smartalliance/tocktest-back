@@ -183,11 +183,18 @@ export class AnalysisService {
     return this.aiService.getWhatToTest(commitsData);
   }
 
+  async syncCommitsFromGithub(userId: string, repoId: string, branch?: string) {
+    const repo = await this.repoService.findOneForUser(userId, repoId);
+    const pat = await this.githubTokensService.getDecryptedToken(userId);
+    if (!pat) throw new NotFoundException('ไม่พบ GitHub Token');
+    return this.syncCommits(repo.fullName, repoId, pat, { branch });
+  }
+
   private async syncCommits(fullName: string, repoId: string, pat: string, params: {
     fromDate?: string;
     toDate?: string;
     branch?: string;
-  }) {
+  }): Promise<{ synced: number }> {
     try {
       const commits = await this.aiService.fetchCommits(fullName, pat, {
         since: params.fromDate,
@@ -210,7 +217,10 @@ export class AnalysisService {
           deletions: c.stats?.deletions ?? 0,
         });
       }
-    } catch { /* silent fail — return cached data */ }
+      return { synced: commits.length };
+    } catch {
+      return { synced: 0 };
+    }
   }
 
   private async saveCommitAnalysis(data: Partial<CommitAnalysis> & { repoId: string; commitSha: string }) {

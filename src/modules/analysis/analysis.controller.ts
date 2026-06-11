@@ -9,6 +9,15 @@ import type { User } from '../users/entities/user.entity';
 export class AnalysisController {
   constructor(private readonly service: AnalysisService) {}
 
+  @Post(':repoId/commits/sync')
+  syncCommits(
+    @CurrentUser() user: User,
+    @Param('repoId') repoId: string,
+    @Query('branch') branch?: string,
+  ) {
+    return this.service.syncCommitsFromGithub(user.id, repoId, branch);
+  }
+
   @Get(':repoId/commits')
   getCommits(
     @CurrentUser() user: User,
