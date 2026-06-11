@@ -23,6 +23,29 @@ ${diffs}
 สร้างอย่างน้อย 3-8 test cases ที่ครอบคลุม: happy path, edge cases, negative cases`;
 }
 
+export function buildPullRequestReviewPrompt(pullRequestData: string): string {
+  return `Review this pull request like a senior QA-aware code reviewer. Focus on bugs, security issues, regression risk, missing validation, and performance problems.
+
+PULL REQUEST DATA:
+${pullRequestData}
+
+Return JSON only:
+{
+  "summary": "Short overall review summary",
+  "riskLevel": "low|medium|high|critical",
+  "findings": [
+    {
+      "file": "path/to/file.ts",
+      "severity": "low|medium|high|critical",
+      "title": "Short issue title",
+      "comment": "Clear explanation of the problem and why it matters",
+      "suggestion": "Recommended fix or follow-up"
+    }
+  ],
+  "mergeRecommendation": "approve|comment|request_changes"
+}`;
+}
+
 export function buildCommitAnalysisPrompt(commitData: string): string {
   return `วิเคราะห์ commit นี้และให้ข้อมูลในรูปแบบ JSON เท่านั้น:
 

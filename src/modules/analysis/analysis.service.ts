@@ -183,6 +183,39 @@ export class AnalysisService {
     return this.aiService.getWhatToTest(commitsData);
   }
 
+  async reviewPullRequest(userId: string, repoId: string, pullRequestNumber: number) {
+    const repo = await this.repoService.findOneForUser(userId, repoId);
+    const pat = await this.githubTokensService.getDecryptedToken(userId);
+    if (!pat) throw new NotFoundException('à¹„à¸¡à¹ˆà¸žà¸š GitHub Token');
+
+    const pullRequest = await this.aiService.fetchPullRequestDetail(repo.fullName, pat, pullRequestNumber);
+    const reviewInput = JSON.stringify(
+      {
+        number: pullRequest.number,
+        title: pullRequest.title,
+        state: pullRequest.state,
+        body: pullRequest.body,
+        headRef: pullRequest.head?.ref,
+        baseRef: pullRequest.base?.ref,
+        changedFiles: pullRequest.changed_files,
+        additions: pullRequest.additions,
+        deletions: pullRequest.deletions,
+        files: (pullRequest.files ?? []).slice(0, 15).map((file: any) => ({
+          filename: file.filename,
+          status: file.status,
+          additions: file.additions,
+          deletions: file.deletions,
+          changes: file.changes,
+          patch: file.patch?.slice(0, 1200) ?? null,
+        })),
+      },
+      null,
+      2,
+    );
+
+    return this.aiService.reviewPullRequest(reviewInput);
+  }
+
   async syncCommitsFromGithub(userId: string, repoId: string, branch?: string) {
     const repo = await this.repoService.findOneForUser(userId, repoId);
     const pat = await this.githubTokensService.getDecryptedToken(userId);

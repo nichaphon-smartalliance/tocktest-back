@@ -5,7 +5,13 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Repository } from '../repositories/entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
-import { buildTestGenerationPrompt, buildCommitAnalysisPrompt, buildWhatToTestPrompt, buildDocUpdatePrompt } from './prompts';
+import {
+  buildTestGenerationPrompt,
+  buildCommitAnalysisPrompt,
+  buildWhatToTestPrompt,
+  buildDocUpdatePrompt,
+  buildPullRequestReviewPrompt,
+} from './prompts';
 import { normalizePriority, normalizeRiskLevel, normalizeTestType } from '../../common/utils/normalize-ai';
 import { heuristicAnalyzeCommit, heuristicGenerateTestCases, heuristicWhatToTest } from '../../common/utils/heuristic-ai';
 
@@ -196,6 +202,58 @@ export class AiService {
     return this.chat([{ role: 'user', content: prompt }]);
   }
 
+  async reviewPullRequest(pullRequestData: string) {
+    if (!(await this.isAvailable())) {
+      return {
+        summary: 'AI service unavailable, so PR review could not be generated.',
+        riskLevel: 'medium' as const,
+        findings: [],
+        mergeRecommendation: 'comment' as const,
+        source: 'heuristic' as const,
+      };
+    }
+
+    const prompt = buildPullRequestReviewPrompt(pullRequestData);
+    const response = await this.chat([{ role: 'user', content: prompt }]);
+    const parsed = this.parseJson<{
+      summary: string;
+      riskLevel: string;
+      findings: Array<{
+        file?: string;
+        severity?: string;
+        title?: string;
+        comment?: string;
+        suggestion?: string;
+      }>;
+      mergeRecommendation?: string;
+    }>(response);
+    const result = parsed ?? {
+      summary: response,
+      riskLevel: 'medium',
+      findings: [],
+      mergeRecommendation: 'comment',
+    };
+
+    return {
+      summary: result.summary ?? '',
+      riskLevel: normalizeRiskLevel(result.riskLevel),
+      findings: Array.isArray(result.findings)
+        ? result.findings.map((item) => ({
+            file: item.file ?? null,
+            severity: normalizeRiskLevel(item.severity),
+            title: item.title ?? 'Review finding',
+            comment: item.comment ?? '',
+            suggestion: item.suggestion ?? '',
+          }))
+        : [],
+      mergeRecommendation:
+        result.mergeRecommendation === 'approve' || result.mergeRecommendation === 'request_changes'
+          ? result.mergeRecommendation
+          : 'comment',
+      source: 'ai' as const,
+    };
+  }
+
   // ── GitHub helpers ────────────────────────────────────────────────────
 
   async fetchCommitDiffs(fullName: string, pat: string, params: {
@@ -251,5 +309,22 @@ export class AiService {
       headers: { Authorization: `token ${pat}` },
     });
     return res.data;
+  }
+
+  async fetchPullRequestDetail(fullName: string, pat: string, prNumber: number): Promise<any> {
+    const [prRes, filesRes] = await Promise.all([
+      axios.get(`https://api.github.com/repos/${fullName}/pulls/${prNumber}`, {
+        headers: { Authorization: `token ${pat}` },
+      }),
+      axios.get(`https://api.github.com/repos/${fullName}/pulls/${prNumber}/files`, {
+        headers: { Authorization: `token ${pat}` },
+        params: { per_page: 50 },
+      }),
+    ]);
+
+    return {
+      ...prRes.data,
+      files: filesRes.data,
+    };
   }
 }
