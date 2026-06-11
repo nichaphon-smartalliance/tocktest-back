@@ -6,6 +6,7 @@ import axios from 'axios';
 import { Repository } from '../repositories/entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
 import { buildTestGenerationPrompt, buildCommitAnalysisPrompt, buildWhatToTestPrompt, buildDocUpdatePrompt } from './prompts';
+import { normalizePriority, normalizeRiskLevel, normalizeTestType } from '../../common/utils/normalize-ai';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -70,20 +71,14 @@ export class AiService {
     toDate?: string;
     commitShas?: string[];
   }) {
-    console.log('Generating test cases for user:', userId, 'repoId:', repoId, 'params:', params);
     const repo = await this.repoRepo.findOne({ where: { id: repoId, userId } });
     if (!repo) throw new NotFoundException('Repository not found');
-    console.log('Found repository:', repo.fullName);
     const pat = await this.githubTokensService.getDecryptedToken(userId);
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token กรุณาเพิ่มก่อน');
-    console.log('Decrypted PAT for user:', userId, 'token starts with:', pat.slice(0, 4));
     const diffs = await this.fetchCommitDiffs(repo.fullName, pat, params);
-    console.log('Fetched commit diffs for user:', userId, 'repoId:', repoId, 'diffs:', diffs);
     if (!diffs) {
-      console.log('No diffs found, returning empty test cases');
       return { testCases: [], logId: null, model: 'default', tokensUsed: 0 };
     }
-    console.log('Commit diffs length:', diffs.length);
     const prompt = buildTestGenerationPrompt(diffs);
     const response = await this.chat([{ role: 'user', content: prompt }]);
     const parsed = this.parseJson<any[]>(response) ?? [];
@@ -94,9 +89,9 @@ export class AiService {
         description: tc.description ?? null,
         steps: Array.isArray(tc.steps) ? tc.steps : null,
         expectedResult: tc.expectedResult ?? null,
-        testType: tc.testType ?? 'manual',
+        testType: normalizeTestType(tc.testType),
         status: 'not_tested',
-        priority: tc.priority ?? 'medium',
+        priority: normalizePriority(tc.priority),
         tags: Array.isArray(tc.tags) ? tc.tags : [],
         isAiGenerated: true,
         folderId: null,
@@ -112,12 +107,20 @@ export class AiService {
   async analyzeCommit(commitData: string) {
     const prompt = buildCommitAnalysisPrompt(commitData);
     const response = await this.chat([{ role: 'user', content: prompt }]);
-    return this.parseJson<{
+    const parsed = this.parseJson<{
       summary: string;
       riskLevel: string;
       testSuggestions: string[];
       affectedAreas: string[];
-    }>(response) ?? { summary: response, riskLevel: 'medium', testSuggestions: [], affectedAreas: [] };
+    }>(response);
+    const fallback = { summary: response, riskLevel: 'medium' as const, testSuggestions: [] as string[], affectedAreas: [] as string[] };
+    const result = parsed ?? fallback;
+    return {
+      ...result,
+      riskLevel: normalizeRiskLevel(result.riskLevel),
+      testSuggestions: Array.isArray(result.testSuggestions) ? result.testSuggestions : [],
+      affectedAreas: Array.isArray(result.affectedAreas) ? result.affectedAreas : [],
+    };
   }
 
   // ── What To Test ──────────────────────────────────────────────────────
@@ -125,11 +128,18 @@ export class AiService {
   async getWhatToTest(commitsData: string) {
     const prompt = buildWhatToTestPrompt(commitsData);
     const response = await this.chat([{ role: 'user', content: prompt }]);
-    return this.parseJson<{
+    const parsed = this.parseJson<{
       recommendations: string[];
       priority: string;
       reasoning: string;
-    }>(response) ?? { recommendations: [response], priority: 'medium', reasoning: '' };
+    }>(response);
+    const fallback = { recommendations: [response], priority: 'medium' as const, reasoning: '' };
+    const result = parsed ?? fallback;
+    return {
+      recommendations: Array.isArray(result.recommendations) ? result.recommendations : [response],
+      priority: normalizePriority(result.priority),
+      reasoning: result.reasoning ?? '',
+    };
   }
 
   // ── Doc Auto-Update ───────────────────────────────────────────────────

@@ -2,14 +2,8 @@ import { Controller, Get, Post, Param, Query, Body, UnauthorizedException } from
 import { AnalysisService } from './analysis.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { IsArray, IsString } from 'class-validator';
+import { WhatToTestDto } from './dto/what-to-test.dto';
 import type { User } from '../users/entities/user.entity';
-
-class WhatToTestDto {
-  @IsArray()
-  @IsString({ each: true })
-  commitShas: string[];
-}
 
 @Controller('api/v1/repositories')
 export class AnalysisController {
@@ -34,8 +28,7 @@ export class AnalysisController {
     @Param('repoId') repoId: string,
     @Param('sha') sha: string,
   ) {
-    if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
-    console.log('AnalysisController.analyzeCommit called', { userId: user.id, repoId, sha });
+    if (!user?.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
     return this.service.analyzeCommit(user.id, repoId, sha);
   }
 
@@ -45,8 +38,7 @@ export class AnalysisController {
     @Param('repoId') repoId: string,
     @Body() dto: WhatToTestDto,
   ) {
-    if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
-    console.log('AnalysisController.getWhatToTest called', { userId: user.id, repoId, commits: dto.commitShas?.length });
+    if (!user?.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
     return this.service.getWhatToTest(user.id, repoId, dto.commitShas);
   }
 }

@@ -6,6 +6,7 @@ import { AiService } from '../ai/ai.service';
 import { RepositoriesService } from '../repositories/repositories.service';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
 import { toPageResult } from '../../common/dto/pagination.dto';
+import { normalizeRiskLevel } from '../../common/utils/normalize-ai';
 
 @Injectable()
 export class AnalysisService {
@@ -117,7 +118,7 @@ export class AnalysisService {
       additions: commitDetail.stats?.additions ?? 0,
       deletions: commitDetail.stats?.deletions ?? 0,
       aiSummary: analysis.summary,
-      riskLevel: analysis.riskLevel,
+      riskLevel: normalizeRiskLevel(analysis.riskLevel),
       analyzedAt: new Date(),
       rawData: JSON.parse(JSON.stringify(commitDetail)),
     });
@@ -169,8 +170,16 @@ export class AnalysisService {
     const commitsData = commitShas
       .map((sha) => commitBySha.get(sha))
       .filter((commit): commit is CommitAnalysis => !!commit)
-      .map((c) => `[${c.commitSha.slice(0, 7)}] ${c.commitMessage}\nSummary: ${c.aiSummary ?? 'N/A'}`)
+      .map((c) => `[${c.commitSha.slice(0, 7)}] ${c.commitMessage ?? '(no message)'}\nSummary: ${c.aiSummary ?? 'N/A'}`)
       .join('\n\n');
+
+    if (!commitsData.trim()) {
+      return {
+        recommendations: [],
+        priority: 'medium',
+        reasoning: 'ไม่พบข้อมูล commit ที่เลือก กรุณาวิเคราะห์ commit ก่อนหรือตรวจสอบ GitHub Token',
+      };
+    }
 
     return this.aiService.getWhatToTest(commitsData);
   }
