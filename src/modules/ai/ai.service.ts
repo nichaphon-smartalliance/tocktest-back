@@ -30,6 +30,16 @@ export class AiService {
 
   // ── Core AI chat ──────────────────────────────────────────────────────
 
+  /** Lightweight availability probe for the UI. */
+  async healthCheck(): Promise<{ available: boolean }> {
+    try {
+      await axios.get(this.apiUrl, { timeout: 3000, validateStatus: () => true });
+      return { available: true };
+    } catch {
+      return { available: false };
+    }
+  }
+
   /** Fast reachability check so a dead AI server fails in ~3s instead of hanging the request. */
   private async ensureReachable(): Promise<void> {
     try {
