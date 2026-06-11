@@ -10,6 +10,7 @@ import { AnalysisModule } from './modules/analysis/analysis.module';
 import { DocsModule } from './modules/docs/docs.module';
 import { AiModule } from './modules/ai/ai.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SettingsModule } from './modules/settings/settings.module';
     DocsModule,
     AiModule,
     SettingsModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

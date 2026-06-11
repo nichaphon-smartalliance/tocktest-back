@@ -57,6 +57,10 @@ export class GithubTokensService {
     }
   }
 
+  async hasActiveToken(userId: string): Promise<boolean> {
+    return (await this.tokenRepo.count({ where: { userId, isActive: true } })) > 0;
+  }
+
   async getDecryptedToken(userId: string): Promise<string | null> {
     const token = await this.tokenRepo.findOne({
       where: { userId, isActive: true },
