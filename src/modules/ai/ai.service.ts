@@ -7,7 +7,7 @@ import { Repository } from '../repositories/entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
 import { buildTestGenerationPrompt, buildCommitAnalysisPrompt, buildWhatToTestPrompt, buildDocUpdatePrompt } from './prompts';
 import { normalizePriority, normalizeRiskLevel, normalizeTestType } from '../../common/utils/normalize-ai';
-import { heuristicAnalyzeCommit, heuristicWhatToTest } from '../../common/utils/heuristic-ai';
+import { heuristicAnalyzeCommit, heuristicGenerateTestCases, heuristicWhatToTest } from '../../common/utils/heuristic-ai';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -104,12 +104,8 @@ export class AiService {
     if (!diffs) {
       throw new InternalServerErrorException('ไม่พบ commit ที่สามารถวิเคราะห์ได้ในช่วงเวลาที่เลือก');
     }
-    const prompt = buildTestGenerationPrompt(diffs);
-    const response = await this.chat([{ role: 'user', content: prompt }]);
-    const parsed = this.parseJson<any[]>(response) ?? [];
-
-    return {
-      testCases: parsed.map((tc) => ({
+    const mapTestCases = (parsed: any[]) =>
+      parsed.map((tc) => ({
         title: tc.title ?? '',
         description: tc.description ?? null,
         steps: Array.isArray(tc.steps) ? tc.steps : null,
@@ -120,7 +116,23 @@ export class AiService {
         tags: Array.isArray(tc.tags) ? tc.tags : [],
         isAiGenerated: true,
         folderId: null,
-      })),
+      }));
+
+    if (!(await this.isAvailable())) {
+      this.logger.warn('AI offline — using heuristic test case generation');
+      const testCases = heuristicGenerateTestCases(diffs);
+      return { testCases, logId: null, model: 'heuristic', tokensUsed: 0 };
+    }
+
+    const prompt = buildTestGenerationPrompt(diffs);
+    const response = await this.chat([{ role: 'user', content: prompt }]);
+    const parsed = this.parseJson<any[]>(response) ?? [];
+    if (parsed.length === 0) {
+      throw new InternalServerErrorException('AI ไม่สามารถสร้าง test case ได้ กรุณาลองใหม่');
+    }
+
+    return {
+      testCases: mapTestCases(parsed),
       logId: null,
       model: 'default',
       tokensUsed: 0,

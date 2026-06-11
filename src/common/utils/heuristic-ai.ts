@@ -44,6 +44,35 @@ export function heuristicAnalyzeCommit(commitData: string) {
   };
 }
 
+export function heuristicGenerateTestCases(diffs: string) {
+  const commitCount = (diffs.match(/--- Commit [a-f0-9]+ ---/gi) ?? []).length || 1;
+  const fileHints = (diffs.match(/^diff --git a\/(.+?) b\//gm) ?? [])
+    .map((line) => line.replace(/^diff --git a\/(.+?) b\/.+$/, "$1"))
+    .slice(0, 3);
+
+  const areas =
+    fileHints.length > 0
+      ? fileHints.map((f) => `ไฟล์ ${f}`)
+      : [`code changes จาก ${commitCount} commit ในช่วงที่เลือก`];
+
+  return areas.map((area, index) => ({
+    title: `[Heuristic] ทดสอบ ${area}`,
+    description: `AI offline — test case พื้นฐานจาก ${area}`,
+    steps: [
+      { order: 1, description: "เตรียม environment และข้อมูลทดสอบ" },
+      { order: 2, description: `ทดสอบ flow หลักที่เกี่ยวข้องกับ ${area}` },
+      { order: 3, description: "ตรวจสอบผลลัพธ์และ regression" },
+    ],
+    expectedResult: "ระบบทำงานถูกต้อง ไม่มี regression",
+    testType: "manual" as const,
+    status: "not_tested" as const,
+    priority: index === 0 ? ("high" as const) : ("medium" as const),
+    tags: ["heuristic", "ai-offline"],
+    isAiGenerated: true,
+    folderId: null,
+  }));
+}
+
 export function heuristicWhatToTest(commitsData: string) {
   const count = (commitsData.match(/\[[0-9a-f]{7}\]/gi) ?? []).length || 1;
   return {
