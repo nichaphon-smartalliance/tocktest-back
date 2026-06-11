@@ -30,7 +30,18 @@ export class AiService {
 
   // ── Core AI chat ──────────────────────────────────────────────────────
 
+  /** Fast reachability check so a dead AI server fails in ~3s instead of hanging the request. */
+  private async ensureReachable(): Promise<void> {
+    try {
+      await axios.get(this.apiUrl, { timeout: 3000, validateStatus: () => true });
+    } catch {
+      this.logger.error(`AI API unreachable at ${this.apiUrl}`);
+      throw new InternalServerErrorException('AI service unavailable');
+    }
+  }
+
   async chat(messages: ChatMessage[]): Promise<string> {
+    await this.ensureReachable();
     try {
       const res = await axios.post(
         `${this.apiUrl}/chat`,
