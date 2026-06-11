@@ -5,10 +5,12 @@ import {
   ManyToOne,
   JoinColumn,
   CreateDateColumn,
+  Unique,
 } from 'typeorm';
 import { Repository } from '../../repositories/entities/repository.entity';
 
 @Entity('commit_analysis')
+@Unique(['repoId', 'commitSha'])
 export class CommitAnalysis {
   @PrimaryGeneratedColumn('uuid')
   id: string;

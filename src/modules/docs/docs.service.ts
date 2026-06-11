@@ -15,7 +15,7 @@ export class DocsService {
   ) {}
 
   async getLatestDoc(userId: string, repoId: string): Promise<ProjectDoc | null> {
-    // REMOVED: Validation check that was throwing the 404 error
+    await this.repoService.findOneForUser(userId, repoId);
     return this.docRepo.findOne({
       where: { repoId },
       order: { version: 'DESC' },
@@ -23,7 +23,7 @@ export class DocsService {
   }
 
   async updateDoc(userId: string, repoId: string, content: string): Promise<ProjectDoc> {
-    // REMOVED: Validation check that was throwing the 404 error
+    await this.repoService.findOneForUser(userId, repoId);
     const latest = await this.getLatestDoc(userId, repoId);
     const newVersion = (latest?.version ?? 0) + 1;
 
@@ -37,6 +37,7 @@ export class DocsService {
   }
 
   async getVersions(userId: string, repoId: string) {
+    await this.repoService.findOneForUser(userId, repoId);
     return this.docRepo.find({
       where: { repoId },
       select: ['id', 'version', 'updatedAt', 'updatedBy'],
@@ -46,6 +47,7 @@ export class DocsService {
   }
 
   async deleteDoc(userId: string, repoId: string): Promise<void> {
+    await this.repoService.findOneForUser(userId, repoId);
     await this.docRepo.delete({ repoId });
   }
 

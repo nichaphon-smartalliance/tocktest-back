@@ -64,7 +64,12 @@ export class AnalysisService {
         analyzedAt: analysisBySha.get(c.sha)?.analyzedAt ?? null,
       }));
 
-      return toPageResult(items, items.length, page, pageSize);
+      return toPageResult(
+        items,
+        commits.length < pageSize ? (page - 1) * pageSize + commits.length : page * pageSize + 1,
+        page,
+        pageSize,
+      );
     }
 
     // Fallback: return stored commit analyses
@@ -101,7 +106,7 @@ export class AnalysisService {
 
     const analysis = await this.aiService.analyzeCommit(commitData);
 
-    const upsertData: any = {
+    await this.saveCommitAnalysis({
       repoId,
       commitSha,
       commitMessage: commitDetail.commit?.message,
@@ -115,8 +120,7 @@ export class AnalysisService {
       riskLevel: analysis.riskLevel,
       analyzedAt: new Date(),
       rawData: JSON.parse(JSON.stringify(commitDetail)),
-    };
-    await this.commitRepo.upsert(upsertData, { conflictPaths: ['repoId', 'commitSha'] });
+    });
 
     return analysis;
   }
@@ -187,21 +191,29 @@ export class AnalysisService {
       });
 
       for (const c of commits) {
-        await this.commitRepo.upsert(
-          {
-            repoId,
-            commitSha: c.sha,
-            commitMessage: c.commit?.message,
-            authorName: c.commit?.author?.name,
-            authorEmail: c.commit?.author?.email,
-            committedAt: new Date(c.commit?.author?.date),
-            filesChanged: c.stats?.total ?? 0,
-            additions: c.stats?.additions ?? 0,
-            deletions: c.stats?.deletions ?? 0,
-          },
-          { conflictPaths: ['repoId', 'commitSha'] },
-        );
+        await this.saveCommitAnalysis({
+          repoId,
+          commitSha: c.sha,
+          commitMessage: c.commit?.message,
+          authorName: c.commit?.author?.name,
+          authorEmail: c.commit?.author?.email,
+          committedAt: new Date(c.commit?.author?.date),
+          filesChanged: c.stats?.total ?? 0,
+          additions: c.stats?.additions ?? 0,
+          deletions: c.stats?.deletions ?? 0,
+        });
       }
     } catch { /* silent fail — return cached data */ }
+  }
+
+  private async saveCommitAnalysis(data: Partial<CommitAnalysis> & { repoId: string; commitSha: string }) {
+    const existing = await this.commitRepo.findOne({
+      where: { repoId: data.repoId, commitSha: data.commitSha },
+    });
+    if (existing) {
+      Object.assign(existing, data);
+      return this.commitRepo.save(existing);
+    }
+    return this.commitRepo.save(this.commitRepo.create(data));
   }
 }

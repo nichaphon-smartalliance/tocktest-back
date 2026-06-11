@@ -13,22 +13,26 @@ export class GithubTokensService {
     private readonly tokenRepo: Repository<GithubToken>,
   ) {}
 
-  async findAll(userId: string): Promise<GithubToken[]> {
-    return this.tokenRepo.find({ where: { userId }, order: { createdAt: 'DESC' } });
+  async findAll(userId: string) {
+    const tokens = await this.tokenRepo.find({ where: { userId }, order: { createdAt: 'DESC' } });
+    return tokens.map((t) => this.toPublicToken(t));
   }
 
-  async create(userId: string, dto: CreateGithubTokenDto): Promise<GithubToken> { 
-    console.log('Creating token for user0000000:', userId, 'with token:', dto.token);
-    console.log('Encrypted token for user:', userId, 'with label:', dto.label);
+  async create(userId: string, dto: CreateGithubTokenDto) {
     const encrypted = encrypt(dto.token);
-    console.log('Encrypted token for user00001:', userId, 'with label:', dto.label);
     const token = this.tokenRepo.create({
       userId,
       label: dto.label,
       tokenEncrypted: encrypted,
       isActive: true,
     });
-    return this.tokenRepo.save(token);
+    const saved = await this.tokenRepo.save(token);
+    return this.toPublicToken(saved);
+  }
+
+  private toPublicToken(token: GithubToken) {
+    const { tokenEncrypted: _tokenEncrypted, user: _user, ...safe } = token;
+    return safe;
   }
 
   async delete(userId: string, tokenId: string): Promise<void> {
