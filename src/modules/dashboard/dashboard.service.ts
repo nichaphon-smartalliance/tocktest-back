@@ -30,6 +30,13 @@ export class DashboardService {
     ]);
 
     if (allRepoIds.length === 0) {
+      const capabilities = this.buildCapabilities({
+        totalRepos,
+        totalTestCases: 0,
+        aiGeneratedCount: 0,
+        hasGithubToken,
+      });
+
       return {
         totalRepos,
         totalTestCases: 0,
@@ -39,6 +46,8 @@ export class DashboardService {
         passRate: 0,
         recentRepos: [],
         hasGithubToken,
+        capabilities,
+        nextMilestones: this.buildNextMilestones(capabilities),
       };
     }
 
@@ -89,6 +98,12 @@ export class DashboardService {
 
     const executed = byStatus.pass + byStatus.fail + byStatus.blocked;
     const passRate = executed > 0 ? Math.round((byStatus.pass / executed) * 100) : 0;
+    const capabilities = this.buildCapabilities({
+      totalRepos,
+      totalTestCases,
+      aiGeneratedCount,
+      hasGithubToken,
+    });
 
     return {
       totalRepos,
@@ -98,6 +113,8 @@ export class DashboardService {
       failHighPriority,
       passRate,
       hasGithubToken,
+      capabilities,
+      nextMilestones: this.buildNextMilestones(capabilities),
       recentRepos: recentRepos.map((r) => ({
         id: r.id,
         fullName: r.fullName,
@@ -107,5 +124,116 @@ export class DashboardService {
         lastSyncedAt: r.lastSyncedAt,
       })),
     };
+  }
+
+  private buildCapabilities(input: {
+    totalRepos: number;
+    totalTestCases: number;
+    aiGeneratedCount: number;
+    hasGithubToken: boolean;
+  }) {
+    const hasRepos = input.totalRepos > 0;
+    const hasGeneratedTests = input.aiGeneratedCount > 0;
+    const hasAnyTests = input.totalTestCases > 0;
+
+    return [
+      {
+        key: 'github_token_sync',
+        label: 'GitHub token + repo import',
+        status: input.hasGithubToken && hasRepos ? 'live' : input.hasGithubToken ? 'partial' : 'missing',
+        description: input.hasGithubToken
+          ? hasRepos
+            ? 'Personal access token is connected and repositories have been imported.'
+            : 'Personal access token is connected, but repositories still need to be synced.'
+          : 'Users still need to connect GitHub with a token before repositories can be imported.',
+      },
+      {
+        key: 'commit_analysis',
+        label: 'AI commit analysis',
+        status: input.hasGithubToken && hasRepos ? 'live' : 'missing',
+        description: input.hasGithubToken && hasRepos
+          ? 'Commit fetching and AI-powered change analysis are available from the repo analysis screen.'
+          : 'Commit analysis depends on a connected GitHub token and at least one synced repository.',
+      },
+      {
+        key: 'test_generation',
+        label: 'AI test generation',
+        status: hasGeneratedTests ? 'live' : input.hasGithubToken && hasRepos ? 'partial' : 'missing',
+        description: hasGeneratedTests
+          ? 'The platform is already generating AI-created test cases for at least one repository.'
+          : input.hasGithubToken && hasRepos
+            ? 'Test generation flow exists, but no AI-generated test cases have been saved yet.'
+            : 'Test generation cannot run until GitHub is connected and repositories are available.',
+      },
+      {
+        key: 'github_oauth',
+        label: 'GitHub OAuth sign-in',
+        status: 'missing',
+        description: 'The app still uses internal credential login and PAT entry. GitHub OAuth is not implemented yet.',
+      },
+      {
+        key: 'github_app',
+        label: 'GitHub App install',
+        status: 'missing',
+        description: 'GitHub App permissions, installation flow, PR status checks, and review-comment writeback are still missing.',
+      },
+      {
+        key: 'webhook_automation',
+        label: 'Webhook-triggered QA automation',
+        status: 'missing',
+        description: 'There is no webhook listener yet for push, pull_request, or merge events.',
+      },
+      {
+        key: 'pr_reviewer',
+        label: 'Pull request review bot',
+        status: 'missing',
+        description: 'The platform can analyze commits, but it does not yet post review comments directly into pull requests.',
+      },
+      {
+        key: 'visual_regression',
+        label: 'Visual regression and UI QA',
+        status: 'missing',
+        description: 'Screenshot comparison, browser automation, and vision-model UI review are not implemented yet.',
+      },
+      {
+        key: 'qa_chat',
+        label: 'Interactive QA chat',
+        status: 'missing',
+        description: 'There is no dedicated repository-aware chat UI for asking test or code QA questions yet.',
+      },
+      {
+        key: 'sandbox_execution',
+        label: 'Sandboxed test execution',
+        status: hasAnyTests ? 'partial' : 'missing',
+        description: hasAnyTests
+          ? 'Test cases exist in the product, but isolated execution in containers or workers is not implemented yet.'
+          : 'A secure runner for executing generated Playwright or Cypress tests is still needed.',
+      },
+    ] as const;
+  }
+
+  private buildNextMilestones(
+    capabilities: ReadonlyArray<{ key: string; status: 'live' | 'partial' | 'missing' }>,
+  ) {
+    const isMissing = (key: string) => capabilities.some((item) => item.key === key && item.status === 'missing');
+    const steps: string[] = [];
+
+    if (isMissing('github_oauth')) {
+      steps.push('Add GitHub OAuth so users can connect accounts without manually pasting a token.');
+    }
+    if (isMissing('github_app')) {
+      steps.push('Create a GitHub App installation flow to enable PR comments, checks, and repository-scoped permissions.');
+    }
+    if (isMissing('webhook_automation')) {
+      steps.push('Add a webhook listener to trigger analysis and test generation on push and pull_request events.');
+    }
+    if (isMissing('visual_regression')) {
+      steps.push('Introduce browser-based screenshot capture plus AI vision review for UI regression detection.');
+    }
+    if (isMissing('qa_chat')) {
+      steps.push('Add a repo-aware QA chat interface for targeted test and code questions.');
+    }
+
+    return steps.slice(0, 5);
   }
 }
