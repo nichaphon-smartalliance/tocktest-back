@@ -73,11 +73,7 @@ export class AnalysisService {
       );
     }
 
-    // Fallback: return stored commit analyses
-    if (pat) {
-      await this.syncCommits(repo.fullName, repoId, pat, params);
-    }
-
+    // Fallback: read stored analyses only (no GitHub sync on every list — that was blocking the API)
     const qb = this.commitRepo.createQueryBuilder('c').where('c.repoId = :repoId', { repoId });
     if (riskLevel) qb.andWhere('c.riskLevel = :riskLevel', { riskLevel });
     qb.orderBy('c.committedAt', 'DESC').skip((page - 1) * pageSize).take(pageSize);
