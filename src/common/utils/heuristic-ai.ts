@@ -44,33 +44,48 @@ export function heuristicAnalyzeCommit(commitData: string) {
   };
 }
 
+function extractChangedFiles(diffs: string): string[] {
+  const files = new Set<string>();
+  for (const m of diffs.matchAll(/^diff --git a\/(.+?) b\/.+$/gm)) {
+    if (m[1]) files.add(m[1]);
+  }
+  return [...files].slice(0, 5);
+}
+
+function fileLabel(path: string): string {
+  return path.split("/").pop() ?? path;
+}
+
 export function heuristicGenerateTestCases(diffs: string) {
   const commitCount = (diffs.match(/--- Commit [a-f0-9]+ ---/gi) ?? []).length || 1;
-  const fileHints = (diffs.match(/^diff --git a\/(.+?) b\//gm) ?? [])
-    .map((line) => line.replace(/^diff --git a\/(.+?) b\/.+$/, "$1"))
-    .slice(0, 3);
+  const files = extractChangedFiles(diffs);
+  const targets =
+    files.length > 0
+      ? files.map((path) => ({ path, label: fileLabel(path) }))
+      : [{ path: "", label: `${commitCount} commit` }];
 
-  const areas =
-    fileHints.length > 0
-      ? fileHints.map((f) => `ไฟล์ ${f}`)
-      : [`code changes จาก ${commitCount} commit ในช่วงที่เลือก`];
-
-  return areas.map((area, index) => ({
-    title: `[Heuristic] ทดสอบ ${area}`,
-    description: `AI offline — test case พื้นฐานจาก ${area}`,
-    steps: [
-      { order: 1, description: "เตรียม environment และข้อมูลทดสอบ" },
-      { order: 2, description: `ทดสอบ flow หลักที่เกี่ยวข้องกับ ${area}` },
-      { order: 3, description: "ตรวจสอบผลลัพธ์และ regression" },
-    ],
-    expectedResult: "ระบบทำงานถูกต้อง ไม่มี regression",
-    testType: "manual" as const,
-    status: "not_tested" as const,
-    priority: index === 0 ? ("high" as const) : ("medium" as const),
-    tags: ["heuristic", "ai-offline"],
-    isAiGenerated: true,
-    folderId: null,
-  }));
+  return targets.map((target, index) => {
+    const scope = files.length > 0 ? `ไฟล์ ${target.label}` : `การเปลี่ยนแปลง ${commitCount} commit`;
+    return {
+      title: `ทดสอบ regression — ${scope}`,
+      description:
+        files.length > 0
+          ? `ตรวจสอบการทำงานหลังแก้ไข ${target.path} (AI offline — template พื้นฐาน)`
+          : `ตรวจสอบ flow หลักจาก commit ในช่วงเวลาที่เลือก (AI offline — template พื้นฐาน)`,
+      steps: [
+        { order: 1, description: "เตรียม environment และข้อมูลทดสอบ" },
+        { order: 2, description: `ทดสอบ flow หลักที่เกี่ยวข้องกับ ${scope}` },
+        { order: 3, description: "ตรวจสอบผลลัพธ์และ regression" },
+      ],
+      expectedResult: "ระบบทำงานถูกต้อง ไม่มี regression",
+      testType: "manual" as const,
+      status: "not_tested" as const,
+      priority: index === 0 ? ("high" as const) : ("medium" as const),
+      tags: ["ai-offline"],
+      isAiGenerated: true,
+      folderId: null,
+    };
+  });
 }
 
 export function heuristicWhatToTest(commitsData: string) {
