@@ -37,10 +37,19 @@ export class AiService {
     return this.config.get<string>('AI_API_URL', 'http://localhost:3009');
   }
 
+  private get openaiApiKey(): string | undefined {
+    return this.config.get<string>('OPENAI_API_KEY');
+  }
+
+  private get openaiModel(): string {
+    return this.config.get<string>('OPENAI_MODEL', 'gpt-4o-mini');
+  }
+
   // ── Core AI chat ──────────────────────────────────────────────────────
 
-  /** Cached probe — avoids repeated 3s timeouts when AI is down. */
+  /** Returns true if any AI backend is usable. */
   async isAvailable(): Promise<boolean> {
+    if (this.openaiApiKey) return true;
     if (this.availCache && Date.now() - this.availCache.ts < this.AVAIL_TTL_MS) {
       return this.availCache.ok;
     }
@@ -59,6 +68,9 @@ export class AiService {
   }
 
   async chat(messages: ChatMessage[]): Promise<string> {
+    if (this.openaiApiKey) {
+      return this.openaiChat(messages);
+    }
     if (!(await this.isAvailable())) {
       throw new ServiceUnavailableException('AI service unavailable');
     }
@@ -68,7 +80,6 @@ export class AiService {
         { messages, max_tokens: 4096 },
         { timeout: 60000 },
       );
-      // Support both OpenAI format and AI API Center envelope { success, data: { content } }
       const content =
         res.data?.choices?.[0]?.message?.content ??
         res.data?.data?.content ??
@@ -80,7 +91,30 @@ export class AiService {
       return content;
     } catch (err: any) {
       this.logger.error(`AI API call failed: ${err.message}`);
-      throw new InternalServerErrorException('AI service unavailable');
+      throw new InternalServerErrorException('AI request failed');
+    }
+  }
+
+  private async openaiChat(messages: ChatMessage[]): Promise<string> {
+    try {
+      const res = await axios.post(
+        'https://api.openai.com/v1/chat/completions',
+        { model: this.openaiModel, messages, max_tokens: 4096 },
+        {
+          timeout: 60000,
+          headers: { Authorization: `Bearer ${this.openaiApiKey}` },
+        },
+      );
+      const content = res.data?.choices?.[0]?.message?.content ?? '';
+      this.logger.debug(`OpenAI response length: ${content.length} chars`);
+      return content;
+    } catch (err: any) {
+      const status = err.response?.status;
+      const detail = err.response?.data?.error?.message ?? err.message;
+      this.logger.error(`OpenAI API call failed [${status}]: ${detail}`);
+      if (status === 401) throw new ServiceUnavailableException('OpenAI API key invalid');
+      if (status === 429) throw new ServiceUnavailableException('OpenAI rate limit exceeded');
+      throw new InternalServerErrorException('AI request failed');
     }
   }
 
