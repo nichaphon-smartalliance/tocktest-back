@@ -1,4 +1,4 @@
-import { Injectable, Logger, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository as TypeOrmRepo } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -60,7 +60,7 @@ export class AiService {
 
   async chat(messages: ChatMessage[]): Promise<string> {
     if (!(await this.isAvailable())) {
-      throw new InternalServerErrorException('AI service unavailable');
+      throw new ServiceUnavailableException('AI service unavailable');
     }
     try {
       const res = await axios.post(
