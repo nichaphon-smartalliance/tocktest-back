@@ -190,16 +190,19 @@ export class DashboardService {
       {
         key: 'webhook_automation',
         label: 'Webhook-triggered QA automation',
-        status: webhookConfigured ? 'partial' : 'missing',
+        status: webhookConfigured ? 'live' : 'missing',
         description: webhookConfigured
-          ? 'Signed GitHub webhook intake is configured, but event-driven QA jobs are not running yet.'
+          ? 'Push and pull_request webhooks enqueue background jobs for commit analysis and PR review.'
           : 'There is no webhook listener configuration yet for push, pull_request, or merge events.',
       },
       {
         key: 'pr_reviewer',
         label: 'Pull request review bot',
-        status: 'missing',
-        description: 'The platform can analyze commits, but it does not yet post review comments directly into pull requests.',
+        status: githubAppConfigured && webhookConfigured ? 'live' : githubAppConfigured ? 'partial' : 'missing',
+        description:
+          githubAppConfigured && webhookConfigured
+            ? 'PR events post AI review comments and commit status checks back to GitHub via the background job runner.'
+            : 'Install the GitHub App and configure webhooks to enable automated PR review writeback.',
       },
       {
         key: 'visual_regression',
@@ -236,8 +239,8 @@ export class DashboardService {
     if (isMissing('github_app')) {
       steps.push('Create a GitHub App installation flow to enable PR comments, checks, and repository-scoped permissions.');
     }
-    if (isMissing('webhook_automation')) {
-      steps.push('Add a webhook listener to trigger analysis and test generation on push and pull_request events.');
+    if (isMissing('pr_reviewer')) {
+      steps.push('Finish GitHub App install so PR reviews can post comments and status checks automatically.');
     }
     if (isMissing('visual_regression')) {
       steps.push('Introduce browser-based screenshot capture plus AI vision review for UI regression detection.');

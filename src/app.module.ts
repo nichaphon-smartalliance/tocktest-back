@@ -12,6 +12,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { GithubAppModule } from './modules/github-app/github-app.module';
+import { JobsModule } from './modules/jobs/jobs.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { GithubAppModule } from './modules/github-app/github-app.module';
     SettingsModule,
     DashboardModule,
     GithubAppModule,
+    JobsModule,
   ],
 })
 export class AppModule {}

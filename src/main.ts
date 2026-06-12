@@ -10,6 +10,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
   const dataSource = app.get(DataSource);
   await ensureGithubTokenExpiresAt(dataSource);
+  await ensureBackgroundJobsTable(dataSource);
   await ensureGithubOAuthAppSchema(dataSource);
 
   app.enableCors({
@@ -92,6 +93,31 @@ async function ensureGithubOAuthAppSchema(dataSource: DataSource) {
     );
   } catch (error) {
     console.warn('Could not verify GitHub OAuth/App schema:', error?.message ?? error);
+  }
+}
+
+async function ensureBackgroundJobsTable(dataSource: DataSource) {
+  try {
+    await dataSource.query(`
+      CREATE TABLE IF NOT EXISTS background_jobs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        type varchar NOT NULL,
+        status varchar NOT NULL DEFAULT 'pending',
+        payload jsonb NOT NULL,
+        dedupe_key varchar UNIQUE,
+        attempts int NOT NULL DEFAULT 0,
+        max_attempts int NOT NULL DEFAULT 3,
+        last_error text,
+        scheduled_at timestamptz NOT NULL DEFAULT NOW(),
+        started_at timestamptz,
+        completed_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT NOW(),
+        updated_at timestamptz NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_background_jobs_status_scheduled ON background_jobs (status, scheduled_at);
+    `);
+  } catch (error) {
+    console.warn('Could not ensure background_jobs table:', (error as Error)?.message ?? error);
   }
 }
 

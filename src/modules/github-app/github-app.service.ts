@@ -1,4 +1,5 @@
-import { Injectable, Logger, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, Logger, UnauthorizedException, BadRequestException, forwardRef } from '@nestjs/common';
+import { JobsService } from '../jobs/jobs.service';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository as TypeOrmRepo } from 'typeorm';
@@ -9,8 +10,6 @@ import { GithubInstallation } from './entities/github-installation.entity';
 import { WebhookEvent } from './entities/webhook-event.entity';
 import { Repository } from '../repositories/entities/repository.entity';
 import { CommitAnalysis } from '../analysis/entities/commit-analysis.entity';
-import { AiService } from '../ai/ai.service';
-import { buildPrReviewInput, formatPrReviewComment, reviewToCommitStatus } from '../../common/utils/pr-review.util';
 
 type GithubWebhookHeaders = {
   event?: string;
@@ -32,7 +31,7 @@ export class GithubAppService {
     private readonly repoRepo: TypeOrmRepo<Repository>,
     @InjectRepository(CommitAnalysis)
     private readonly commitAnalysisRepo: TypeOrmRepo<CommitAnalysis>,
-    private readonly aiService: AiService,
+    @Inject(forwardRef(() => JobsService)) private readonly jobsService: JobsService,
   ) {}
 
   getSetupStatus() {
@@ -128,6 +127,20 @@ export class GithubAppService {
 
     if (setup.webhookSecretConfigured) {
       this.verifySignature(rawBody, headers.signature256);
+    }
+
+    if (deliveryId) {
+      const dup = await this.webhookEventRepo.findOne({ where: { deliveryId } });
+      if (dup) {
+        return {
+          received: true,
+          event,
+          action,
+          deliveryId,
+          duplicate: true,
+          processedAt: dup.processedAt?.toISOString() ?? null,
+        };
+      }
     }
 
     const webhookEvent = this.webhookEventRepo.create({
@@ -263,11 +276,19 @@ export class GithubAppService {
       { conflictPaths: ['repoId', 'commitSha'] },
     );
 
+    const installationId = body?.installation?.id ? String(body.installation.id) : null;
+    await this.jobsService.enqueue(
+      'analyze_commit',
+      { repoId: repo.id, commitSha: after, installationId },
+      `analyze:${repo.id}:${after}`,
+    );
+
     return {
-      message: 'Push event queued for commit analysis.',
+      message: 'Push event queued for background commit analysis.',
       repository: fullName,
       ref,
       commitSha: after,
+      queued: true,
     };
   }
 
@@ -282,42 +303,26 @@ export class GithubAppService {
     const baseBranch = body?.pull_request?.base?.ref ?? null;
 
     const trackedActions = ['opened', 'reopened', 'synchronize'];
+    let queued = false;
 
     if (installationId && fullName && prNumber && headSha && trackedActions.includes(action ?? '')) {
-      try {
-        await this.postCommitStatus(
-          installationId,
-          fullName,
-          headSha,
-          'pending',
-          'TockTest AI review in progress',
-          'tocktest/ai-review',
-        );
-
-        const token = await this.getInstallationToken(installationId);
-        const pullRequest = await this.aiService.fetchPullRequestDetail(fullName, token, prNumber);
-        const review = await this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest));
-
-        await this.postIssueComment(installationId, fullName, prNumber, formatPrReviewComment(review));
-        await this.postCommitStatus(
-          installationId,
-          fullName,
-          headSha,
-          reviewToCommitStatus(review),
-          review.summary || 'TockTest AI review completed',
-          'tocktest/ai-review',
-        );
-      } catch (err) {
-        this.logger.warn(`Failed to write back to ${fullName}#${prNumber}: ${err?.message ?? err}`);
-      }
+      await this.jobsService.enqueue(
+        'pr_review',
+        { installationId, repoFullName: fullName, prNumber, headSha },
+        `pr:${fullName}:${prNumber}:${headSha}`,
+      );
+      queued = true;
     }
 
     return {
-      message: 'Pull request event accepted for QA automation.',
+      message: queued
+        ? 'Pull request queued for background AI review and GitHub writeback.'
+        : 'Pull request event recorded (no automation for this action).',
       repository: fullName,
       pullRequestNumber: prNumber,
       headSha,
       baseBranch,
+      queued,
     };
   }
 
