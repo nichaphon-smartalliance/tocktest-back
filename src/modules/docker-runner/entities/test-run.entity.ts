@@ -17,7 +17,7 @@ export class TestRun {
   @Column({ name: 'user_id', type: 'uuid' })
   userId: string;
 
-  @Column({ type: 'varchar', default: 'playwright' })
+  @Column({ type: 'varchar', default: 'cypress' })
   framework: string;
 
   @Column({ name: 'file_content', type: 'text' })

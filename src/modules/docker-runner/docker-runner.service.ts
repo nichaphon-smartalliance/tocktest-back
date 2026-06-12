@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository as TypeOrmRepo } from 'typeorm';
 import { exec } from 'child_process';
@@ -39,7 +39,7 @@ export class DockerRunnerService {
     const run = this.runRepo.create({
       repoId,
       userId,
-      framework: dto.framework ?? 'playwright',
+      framework: dto.framework ?? 'cypress',
       fileContent: dto.fileContent,
       status: 'queued',
     });

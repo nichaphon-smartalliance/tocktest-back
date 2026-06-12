@@ -176,8 +176,8 @@ export class DashboardService {
       {
         key: 'github_oauth',
         label: 'GitHub OAuth sign-in',
-        status: 'missing',
-        description: 'The app still uses internal credential login and PAT entry. GitHub OAuth is not implemented yet.',
+        status: 'live',
+        description: 'GitHub OAuth sign-in is implemented. Users can authenticate via GitHub through the login page.',
       },
       {
         key: 'github_app',
@@ -205,24 +205,16 @@ export class DashboardService {
             : 'Install the GitHub App and configure webhooks to enable automated PR review writeback.',
       },
       {
-        key: 'visual_regression',
-        label: 'Visual regression and UI QA',
-        status: 'missing',
-        description: 'Screenshot comparison, browser automation, and vision-model UI review are not implemented yet.',
-      },
-      {
         key: 'qa_chat',
         label: 'Interactive QA chat',
-        status: 'missing',
-        description: 'There is no dedicated repository-aware chat UI for asking test or code QA questions yet.',
+        status: 'live',
+        description: 'Repository-aware QA chat is live. Ask test and code questions in the QA Chat tab.',
       },
       {
         key: 'sandbox_execution',
         label: 'Sandboxed test execution',
-        status: hasAnyTests ? 'partial' : 'missing',
-        description: hasAnyTests
-          ? 'Test cases exist in the product, but isolated execution in containers or workers is not implemented yet.'
-          : 'A secure runner for executing generated Cypress tests is still needed.',
+        status: 'live',
+        description: 'Cypress test execution runs in isolated Docker containers via the Sandbox tab. Docker must be available on the server.',
       },
     ] as const;
   }
@@ -233,22 +225,12 @@ export class DashboardService {
     const isMissing = (key: string) => capabilities.some((item) => item.key === key && item.status === 'missing');
     const steps: string[] = [];
 
-    if (isMissing('github_oauth')) {
-      steps.push('Add GitHub OAuth so users can connect accounts without manually pasting a token.');
-    }
     if (isMissing('github_app')) {
       steps.push('Create a GitHub App installation flow to enable PR comments, checks, and repository-scoped permissions.');
     }
     if (isMissing('pr_reviewer')) {
       steps.push('Finish GitHub App install so PR reviews can post comments and status checks automatically.');
     }
-    if (isMissing('visual_regression')) {
-      steps.push('Introduce browser-based screenshot capture plus AI vision review for UI regression detection.');
-    }
-    if (isMissing('qa_chat')) {
-      steps.push('Add a repo-aware QA chat interface for targeted test and code questions.');
-    }
-
     return steps.slice(0, 5);
   }
 }
