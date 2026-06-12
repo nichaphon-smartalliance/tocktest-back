@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Headers, Post, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Body, Controller, Get, Headers, Post, Query, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { User } from '../users/entities/user.entity';
 import { GithubAppService } from './github-app.service';
 
 @Controller('api/v1/github-app')
@@ -10,6 +12,33 @@ export class GithubAppController {
   @Get('setup')
   getSetupStatus() {
     return this.githubAppService.getSetupStatus();
+  }
+
+  @Get('install-url')
+  getInstallUrl(@CurrentUser() user: User) {
+    return { url: this.githubAppService.getInstallUrl(user.id) };
+  }
+
+  @Get('installations')
+  getInstallations(@CurrentUser() user: User) {
+    return this.githubAppService.getInstallationsForUser(user.id);
+  }
+
+  @Public()
+  @Get('installation/callback')
+  async installationCallback(
+    @Query('installation_id') installationId: string | undefined,
+    @Query('setup_action') setupAction: string | undefined,
+    @Query('state') state: string | undefined,
+    @Res() res: Response,
+  ) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4003';
+    try {
+      await this.githubAppService.handleInstallationCallback(installationId, setupAction, state);
+      return res.redirect(`${frontendUrl}/settings?github_app=${setupAction ?? 'installed'}`);
+    } catch {
+      return res.redirect(`${frontendUrl}/settings?github_app=error`);
+    }
   }
 
   @Public()

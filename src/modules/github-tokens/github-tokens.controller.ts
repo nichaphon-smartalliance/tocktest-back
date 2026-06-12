@@ -5,15 +5,44 @@ import {
   Delete,
   Body,
   Param,
+  Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { GithubTokensService } from './github-tokens.service';
 import { CreateGithubTokenDto } from './dto/create-github-token.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import type { User } from '../users/entities/user.entity';
 
 @Controller('api/v1/github-tokens')
 export class GithubTokensController {
   constructor(private readonly service: GithubTokensService) {}
+
+  @Get('oauth/connect-url')
+  getOAuthConnectUrl(@CurrentUser() user: User) {
+    return { url: this.service.getOAuthConnectUrl(user.id) };
+  }
+
+  @Public()
+  @Get('oauth/callback')
+  async oauthCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Query('error') error: string,
+    @Res() res: Response,
+  ) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4003';
+    if (error || !code || !state) {
+      return res.redirect(`${frontendUrl}/settings?github=error`);
+    }
+    try {
+      await this.service.handleOAuthCallback(code, state);
+      return res.redirect(`${frontendUrl}/settings?github=connected`);
+    } catch {
+      return res.redirect(`${frontendUrl}/settings?github=error`);
+    }
+  }
 
   @Get()
   findAll(@CurrentUser() user: User) {

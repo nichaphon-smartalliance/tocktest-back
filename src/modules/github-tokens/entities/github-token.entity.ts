@@ -27,6 +27,15 @@ export class GithubToken {
   @Column({ name: 'token_encrypted', type: 'varchar' })
   tokenEncrypted: string;
 
+  @Column({ type: 'varchar', default: 'pat' })
+  provider: string;
+
+  @Column({ name: 'github_login', nullable: true, type: 'varchar' })
+  githubLogin: string | null;
+
+  @Column({ name: 'github_user_id', nullable: true, type: 'bigint' })
+  githubUserId: number | null;
+
   @Column({ type: 'text', array: true, default: '{}' })
   scopes: string[];
 
