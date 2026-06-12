@@ -7,12 +7,15 @@ import * as jwt from 'jsonwebtoken';
 import { GithubToken } from './entities/github-token.entity';
 import { encrypt, decrypt } from '../../common/utils/encryption.util';
 import type { CreateGithubTokenDto } from './dto/create-github-token.dto';
+import { Repository as AppRepository } from '../repositories/entities/repository.entity';
 
 @Injectable()
 export class GithubTokensService {
   constructor(
     @InjectRepository(GithubToken)
     private readonly tokenRepo: Repository<GithubToken>,
+    @InjectRepository(AppRepository)
+    private readonly repoRepo: Repository<AppRepository>,
     private readonly config: ConfigService,
   ) {}
 
@@ -164,6 +167,42 @@ export class GithubTokensService {
       );
     }
 
+    await this.syncRepositoriesFromOauth(payload.userId, accessToken);
+
     return { userId: payload.userId, githubLogin: ghUser.login };
+  }
+
+  private async syncRepositoriesFromOauth(userId: string, accessToken: string) {
+    const repos: any[] = [];
+    let page = 1;
+
+    while (true) {
+      const res = await axios.get('https://api.github.com/user/repos', {
+        headers: { Authorization: `token ${accessToken}` },
+        params: { per_page: 100, page, sort: 'updated' },
+      });
+      repos.push(...res.data);
+      if (res.data.length < 100) break;
+      page++;
+    }
+
+    for (const gr of repos) {
+      await this.repoRepo.upsert(
+        {
+          userId,
+          githubRepoId: gr.id,
+          fullName: gr.full_name,
+          name: gr.name,
+          description: gr.description,
+          defaultBranch: gr.default_branch,
+          isPrivate: gr.private,
+          htmlUrl: gr.html_url,
+          cloneUrl: gr.clone_url,
+          ownerLogin: gr.owner?.login,
+          lastSyncedAt: new Date(),
+        },
+        { conflictPaths: ['userId', 'githubRepoId'] },
+      );
+    }
   }
 }
