@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { GithubTokensModule } from './modules/github-tokens/github-tokens.module';
@@ -13,10 +14,14 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { GithubAppModule } from './modules/github-app/github-app.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { ChatbotModule } from './modules/chatbot/chatbot.module';
+import { DockerRunnerModule } from './modules/docker-runner/docker-runner.module';
+import { VisualRegressionModule } from './modules/visual-regression/visual-regression.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -44,6 +49,9 @@ import { JobsModule } from './modules/jobs/jobs.module';
     DashboardModule,
     GithubAppModule,
     JobsModule,
+    ChatbotModule,
+    DockerRunnerModule,
+    VisualRegressionModule,
   ],
 })
 export class AppModule {}

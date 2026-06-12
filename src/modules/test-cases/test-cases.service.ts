@@ -113,4 +113,21 @@ export class TestCasesService {
     );
     return this.tcRepo.save(items);
   }
+
+  async getRepoForExport(userId: string, repoId: string) {
+    return this.repoService.findOneForUser(userId, repoId);
+  }
+
+  async findAllForExport(userId: string, repoId: string, ids: string[]): Promise<TestCase[]> {
+    await this.repoService.findOneForUser(userId, repoId);
+    if (ids.length > 0) {
+      return this.tcRepo
+        .createQueryBuilder('tc')
+        .where('tc.repoId = :repoId', { repoId })
+        .andWhere('tc.id IN (:...ids)', { ids })
+        .orderBy('tc.createdAt', 'ASC')
+        .getMany();
+    }
+    return this.tcRepo.find({ where: { repoId }, order: { createdAt: 'ASC' }, take: 200 });
+  }
 }

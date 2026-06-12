@@ -479,6 +479,48 @@ export class GithubAppService {
     return res.data.token;
   }
 
+  async getWebhookEvents(limit = 50, status?: string) {
+    const qb = this.webhookEventRepo
+      .createQueryBuilder('e')
+      .orderBy('e.createdAt', 'DESC')
+      .take(Math.min(Number(limit) || 50, 200));
+    if (status) qb.where('e.status = :status', { status });
+    const events = await qb.getMany();
+    return events.map((e) => ({
+      id: e.id,
+      event: e.event,
+      action: e.action,
+      repoFullName: e.repoFullName,
+      deliveryId: e.deliveryId,
+      status: e.status,
+      errorMessage: e.errorMessage,
+      processedAt: e.processedAt,
+      createdAt: e.createdAt,
+    }));
+  }
+
+  async replayWebhookEvent(eventId: string) {
+    const event = await this.webhookEventRepo.findOne({ where: { id: eventId } });
+    if (!event) throw new BadRequestException('Webhook event not found');
+
+    event.status = 'replaying';
+    await this.webhookEventRepo.save(event);
+
+    try {
+      const result = await this.processEvent(event.event, event.action, event.payload, event.installationId ? String(event.installationId) : null);
+      event.status = 'processed';
+      event.processedAt = new Date();
+      event.errorMessage = null;
+      await this.webhookEventRepo.save(event);
+      return { replayed: true, result };
+    } catch (err: any) {
+      event.status = 'failed';
+      event.errorMessage = String(err?.message ?? err).slice(0, 2000);
+      await this.webhookEventRepo.save(event);
+      throw err;
+    }
+  }
+
   async postIssueComment(installationId: string, repoFullName: string, issueNumber: number, body: string) {
     const token = await this.getInstallationToken(installationId);
     await axios.post(

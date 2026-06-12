@@ -18,9 +18,13 @@ export class ResponseInterceptor<T>
   implements NestInterceptor<T, ApiResponse<T>>
 {
   intercept(
-    _context: ExecutionContext,
+    context: ExecutionContext,
     next: CallHandler,
   ): Observable<ApiResponse<T>> {
+    const res = context.switchToHttp().getResponse();
+    if (res?.setHeader && !res.getHeader?.('Content-Type')) {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    }
     return next.handle().pipe(
       map((data) => ({
         success: true,

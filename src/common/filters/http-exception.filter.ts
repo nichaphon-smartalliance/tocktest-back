@@ -27,10 +27,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message = exception.message;
     }
 
-    response.status(status).json({
-      success: false,
-      message: Array.isArray(message) ? message[0] : message,
-      statusCode: status,
-    });
+    response
+      .status(status)
+      .setHeader('Content-Type', 'application/json; charset=utf-8')
+      .json({
+        success: false,
+        message: Array.isArray(message) ? message[0] : message,
+        statusCode: status,
+      });
   }
 }

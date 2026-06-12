@@ -7,8 +7,12 @@ import {
   Param,
   Body,
   Query,
+  Res,
+  BadRequestException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { TestCasesService } from './test-cases.service';
+import { TestExportService } from './test-export.service';
 import { CreateTestCaseDto, UpdateTestCaseDto, BulkSaveTestCasesDto } from './dto/create-test-case.dto';
 import { CreateFolderDto, UpdateFolderDto } from './dto/create-folder.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -17,7 +21,10 @@ import type { User } from '../users/entities/user.entity';
 
 @Controller('api/v1/repositories')
 export class TestCasesController {
-  constructor(private readonly service: TestCasesService) {}
+  constructor(
+    private readonly service: TestCasesService,
+    private readonly exportService: TestExportService,
+  ) {}
 
   // ── Folders ───────────────────────────────────────────────────────────
 
@@ -55,6 +62,28 @@ export class TestCasesController {
   }
 
   // ── Test Cases ────────────────────────────────────────────────────────
+
+  @Get(':repoId/test-cases/export')
+  async exportTestCases(
+    @CurrentUser() user: User,
+    @Param('repoId') repoId: string,
+    @Query('framework') framework: string,
+    @Query('ids') ids: string,
+    @Res() res: Response,
+  ) {
+    const fw = framework === 'cypress' ? 'cypress' : 'playwright';
+    const idList = ids ? ids.split(',').filter(Boolean) : [];
+    const repo = await this.service.getRepoForExport(user.id, repoId);
+    const testCases = await this.service.findAllForExport(user.id, repoId, idList);
+    const content =
+      fw === 'cypress'
+        ? this.exportService.generateCypress(repo.fullName, testCases)
+        : this.exportService.generatePlaywright(repo.fullName, testCases);
+    const filename = `${repo.fullName.replace('/', '_')}.${fw === 'cypress' ? 'cy' : 'spec'}.ts`;
+    res.setHeader('Content-Type', 'text/typescript; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(content);
+  }
 
   @Post(':repoId/test-cases/bulk')
   bulkSave(
