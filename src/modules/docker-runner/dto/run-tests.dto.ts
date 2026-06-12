@@ -7,5 +7,10 @@ export class RunTestsDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
   framework?: 'cypress';
 }

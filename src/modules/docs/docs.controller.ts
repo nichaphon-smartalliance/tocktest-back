@@ -18,6 +18,11 @@ export class DocsController {
     return this.service.getLatestDoc(user.id, repoId);
   }
 
+  @Get(':repoId/docs/status')
+  getStatus(@CurrentUser() user: User, @Param('repoId') repoId: string) {
+    return this.service.getStatus(user.id, repoId);
+  }
+
   @Put(':repoId/docs')
   updateDoc(
     @CurrentUser() user: User,
@@ -27,9 +32,21 @@ export class DocsController {
     return this.service.updateDoc(user.id, repoId, dto.content);
   }
 
+  @Post(':repoId/docs/gen')
+  generate(@CurrentUser() user: User, @Param('repoId') repoId: string) {
+    if (!user || !user.id) throw new UnauthorizedException('à¸à¸£à¸¸à¸“à¸²à¹€à¸‚à¹‰à¸²à¸ªà¸¹à¹ˆà¸£à¸°à¸šà¸šà¸à¹ˆà¸­à¸™');
+    return this.service.generate(user.id, repoId);
+  }
+
+  @Post(':repoId/docs/refresh')
+  refresh(@CurrentUser() user: User, @Param('repoId') repoId: string) {
+    if (!user || !user.id) throw new UnauthorizedException('à¸à¸£à¸¸à¸“à¸²à¹€à¸‚à¹‰à¸²à¸ªà¸¹à¹ˆà¸£à¸°à¸šà¸šà¸à¹ˆà¸­à¸™');
+    return this.service.refresh(user.id, repoId);
+  }
+
   @Post(':repoId/docs/auto-update')
   autoUpdate(@CurrentUser() user: User, @Param('repoId') repoId: string) {
-    if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
+    if (!user || !user.id) throw new UnauthorizedException('à¸à¸£à¸¸à¸“à¸²à¹€à¸‚à¹‰à¸²à¸ªà¸¹à¹ˆà¸£à¸°à¸šà¸šà¸à¹ˆà¸­à¸™');
     return this.service.autoUpdate(user.id, repoId);
   }
 

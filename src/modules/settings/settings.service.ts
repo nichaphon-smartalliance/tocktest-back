@@ -14,11 +14,11 @@ export class SettingsService {
   ) {}
 
   async getSettings(userId: string, repoId: string): Promise<RepoSettings> {
-    await this.repoService.findOneForUser(userId, repoId);
+    const repo = await this.repoService.findOneForUser(userId, repoId);
 
     let settings = await this.settingsRepo.findOne({ where: { repoId } });
     if (!settings) {
-      settings = this.settingsRepo.create({ repoId });
+      settings = this.settingsRepo.create({ repoId, defaultBranch: repo.defaultBranch });
       settings = await this.settingsRepo.save(settings);
     }
     return settings;

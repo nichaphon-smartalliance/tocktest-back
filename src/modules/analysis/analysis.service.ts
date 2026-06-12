@@ -105,7 +105,7 @@ export class AnalysisService {
       })),
     });
 
-    const analysis = await this.aiService.analyzeCommit(commitData);
+    const analysis = await this.aiService.analyzeCommit(commitData, { repoId });
 
     await this.saveCommitAnalysis({
       repoId,
@@ -181,7 +181,7 @@ export class AnalysisService {
       };
     }
 
-    return this.aiService.getWhatToTest(commitsData);
+    return this.aiService.getWhatToTest(commitsData, { repoId });
   }
 
   async reviewPullRequest(userId: string, repoId: string, pullRequestNumber: number) {
@@ -190,7 +190,7 @@ export class AnalysisService {
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token');
 
     const pullRequest = await this.aiService.fetchPullRequestDetail(repo.fullName, pat, pullRequestNumber);
-    return this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest));
+    return this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest), { repoId });
   }
 
   async reviewAndCommentPullRequest(userId: string, repoId: string, pullRequestNumber: number) {
@@ -199,7 +199,7 @@ export class AnalysisService {
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token');
 
     const pullRequest = await this.aiService.fetchPullRequestDetail(repo.fullName, pat, pullRequestNumber);
-    const review = await this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest));
+    const review = await this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest), { repoId });
 
     await this.aiService.postIssueComment(repo.fullName, pat, pullRequestNumber, formatPrReviewComment(review));
 

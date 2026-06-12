@@ -41,7 +41,7 @@ Keep responses focused and practical. Respond in the same language as the user's
       { role: 'user' as const, content: dto.message },
     ];
 
-    const response = await this.aiService.chat(messages);
+    const response = await this.aiService.chat(messages, { repoId });
     return { response, repoId };
   }
 

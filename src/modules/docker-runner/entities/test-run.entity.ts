@@ -20,6 +20,9 @@ export class TestRun {
   @Column({ type: 'varchar', default: 'cypress' })
   framework: string;
 
+  @Column({ type: 'varchar', length: 120, default: 'Untitled run' })
+  name: string;
+
   @Column({ name: 'file_content', type: 'text' })
   fileContent: string;
 

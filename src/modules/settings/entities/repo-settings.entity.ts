@@ -33,6 +33,30 @@ export class RepoSettings {
   @Column({ name: 'auto_analyze_on_push', type: 'boolean', default: false })
   autoAnalyzeOnPush: boolean;
 
+  @Column({ name: 'ai_offline_mode', type: 'boolean', default: false })
+  aiOfflineMode: boolean;
+
+  @Column({ name: 'docs_auto_sync', type: 'boolean', default: false })
+  docsAutoSync: boolean;
+
+  @Column({ name: 'docs_sync_status', type: 'varchar', default: 'idle' })
+  docsSyncStatus: string;
+
+  @Column({ name: 'docs_sync_message', nullable: true, type: 'text' })
+  docsSyncMessage: string | null;
+
+  @Column({ name: 'docs_last_generated_at', nullable: true, type: 'timestamptz' })
+  docsLastGeneratedAt: Date | null;
+
+  @Column({ name: 'docs_last_commit_sha', nullable: true, type: 'varchar', length: 64 })
+  docsLastCommitSha: string | null;
+
+  @Column({ name: 'docs_last_source_sha', nullable: true, type: 'varchar', length: 64 })
+  docsLastSourceSha: string | null;
+
+  @Column({ name: 'docs_source_cache', type: 'jsonb', nullable: true })
+  docsSourceCache: Record<string, unknown> | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

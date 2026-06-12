@@ -16,6 +16,7 @@ async function bootstrap() {
   await ensureGithubLoginSchema(dataSource);
   await ensureRepositoryInstallationSchema(dataSource);
   await ensureWebhookEventErrorColumn(dataSource);
+  await ensureRepoSettingsEnhancements(dataSource);
   await ensureTestRunsTable(dataSource);
 
   app.enableCors({
@@ -162,6 +163,21 @@ async function ensureWebhookEventErrorColumn(dataSource: DataSource) {
   }
 }
 
+async function ensureRepoSettingsEnhancements(dataSource: DataSource) {
+  try {
+    await dataSource.query("ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS ai_offline_mode BOOLEAN NOT NULL DEFAULT false");
+    await dataSource.query("ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_auto_sync BOOLEAN NOT NULL DEFAULT false");
+    await dataSource.query("ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_sync_status VARCHAR(20) NOT NULL DEFAULT 'idle'");
+    await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_sync_message TEXT');
+    await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_last_generated_at TIMESTAMPTZ');
+    await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_last_commit_sha VARCHAR(64)');
+    await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_last_source_sha VARCHAR(64)');
+    await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_source_cache JSONB');
+  } catch (error) {
+    console.warn('Could not ensure repo_settings enhancements:', (error as Error)?.message ?? error);
+  }
+}
+
 async function ensureTestRunsTable(dataSource: DataSource) {
   try {
     await dataSource.query(`
@@ -170,6 +186,7 @@ async function ensureTestRunsTable(dataSource: DataSource) {
         repo_id UUID NOT NULL,
         user_id UUID NOT NULL,
         framework VARCHAR(50) NOT NULL DEFAULT 'cypress',
+        name VARCHAR(120) NOT NULL DEFAULT 'Untitled run',
         file_content TEXT NOT NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'queued',
         output TEXT,
@@ -182,6 +199,8 @@ async function ensureTestRunsTable(dataSource: DataSource) {
       );
       CREATE INDEX IF NOT EXISTS idx_test_runs_repo_user ON test_runs(repo_id, user_id);
     `);
+    await dataSource.query("ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS name VARCHAR(120) NOT NULL DEFAULT 'Untitled run'");
+    await dataSource.query('CREATE INDEX IF NOT EXISTS idx_test_runs_repo_user_created_at ON test_runs(repo_id, user_id, created_at DESC)');
   } catch (error) {
     console.warn('Could not ensure test_runs table:', (error as Error)?.message ?? error);
   }

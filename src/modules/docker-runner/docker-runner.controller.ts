@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { DockerRunnerService } from './docker-runner.service';
 import { RunTestsDto } from './dto/run-tests.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -28,8 +28,9 @@ export class DockerRunnerController {
     @CurrentUser() user: User,
     @Param('repoId') repoId: string,
     @Query('limit') limit?: number,
+    @Query('search') search?: string,
   ) {
-    return this.dockerRunner.listRuns(user.id, repoId, limit);
+    return this.dockerRunner.listRuns(user.id, repoId, limit, search);
   }
 
   @Get(':repoId/sandbox/runs/:runId')
@@ -38,5 +39,32 @@ export class DockerRunnerController {
     @Param('runId') runId: string,
   ) {
     return this.dockerRunner.getRunStatus(user.id, runId);
+  }
+
+  @Patch(':repoId/sandbox/runs/:runId')
+  renameRun(
+    @CurrentUser() user: User,
+    @Param('repoId') repoId: string,
+    @Param('runId') runId: string,
+    @Body('name') name: string,
+  ) {
+    return this.dockerRunner.renameRun(user.id, repoId, runId, name);
+  }
+
+  @Delete(':repoId/sandbox/runs/:runId')
+  deleteRun(
+    @CurrentUser() user: User,
+    @Param('repoId') repoId: string,
+    @Param('runId') runId: string,
+  ) {
+    return this.dockerRunner.deleteRun(user.id, repoId, runId);
+  }
+
+  @Delete(':repoId/sandbox/runs')
+  clearRuns(
+    @CurrentUser() user: User,
+    @Param('repoId') repoId: string,
+  ) {
+    return this.dockerRunner.clearRuns(user.id, repoId);
   }
 }

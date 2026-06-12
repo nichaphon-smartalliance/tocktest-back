@@ -16,4 +16,12 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsString()
   aiModel?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  aiOfflineMode?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  docsAutoSync?: boolean;
 }

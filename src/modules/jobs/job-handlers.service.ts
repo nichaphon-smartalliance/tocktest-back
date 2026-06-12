@@ -59,7 +59,7 @@ export class JobHandlersService {
       })),
     });
 
-    const analysis = await this.aiService.analyzeCommit(commitData);
+    const analysis = await this.aiService.analyzeCommit(commitData, { repoId });
 
     await this.commitRepo.upsert(
       {
@@ -104,7 +104,8 @@ export class JobHandlersService {
     try {
       const token = await this.githubApp.getInstallationToken(installationId);
       const pullRequest = await this.aiService.fetchPullRequestDetail(repoFullName, token, prNumber);
-      const review = await this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest));
+      const repo = await this.repoRepo.findOne({ where: { fullName: repoFullName } });
+      const review = await this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest), { repoId: repo?.id });
 
       await this.githubApp.postIssueComment(
         installationId,

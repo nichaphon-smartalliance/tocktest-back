@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { Repository } from '../repositories/entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
+import { RepoSettings } from '../settings/entities/repo-settings.entity';
 import {
   buildTestGenerationPrompt,
   buildCommitAnalysisPrompt,
@@ -20,6 +21,11 @@ interface ChatMessage {
   content: string;
 }
 
+interface AiExecutionOptions {
+  forceOffline?: boolean;
+  repoId?: string;
+}
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -30,6 +36,8 @@ export class AiService {
     private readonly config: ConfigService,
     @InjectRepository(Repository)
     private readonly repoRepo: TypeOrmRepo<Repository>,
+    @InjectRepository(RepoSettings)
+    private readonly repoSettingsRepo: TypeOrmRepo<RepoSettings>,
     private readonly githubTokensService: GithubTokensService,
   ) {}
 
@@ -71,7 +79,21 @@ export class AiService {
     return { available: await this.isAvailable() };
   }
 
-  async chat(messages: ChatMessage[]): Promise<string> {
+  private async shouldUseOfflineMode(options?: AiExecutionOptions): Promise<boolean> {
+    if (options?.forceOffline) return true;
+    if (!options?.repoId) return false;
+    const settings = await this.repoSettingsRepo.findOne({
+      where: { repoId: options.repoId },
+      select: ['aiOfflineMode'],
+    });
+    return settings?.aiOfflineMode ?? false;
+  }
+
+  async chat(messages: ChatMessage[], options?: AiExecutionOptions): Promise<string> {
+    if (await this.shouldUseOfflineMode(options)) {
+      this.logger.warn('AI offline mode enabled for repository - using heuristic chat');
+      return heuristicChat(messages);
+    }
     if (this.openaiApiKey) {
       return this.openaiChat(messages);
     }
@@ -163,14 +185,14 @@ export class AiService {
         folderId: null,
       }));
 
-    if (!(await this.isRemoteAiAvailable())) {
+    if (await this.shouldUseOfflineMode({ repoId }) || !(await this.isRemoteAiAvailable())) {
       this.logger.warn('AI offline — using heuristic test case generation');
       const testCases = heuristicGenerateTestCases(diffs);
       return { testCases, logId: null, model: 'heuristic', tokensUsed: 0 };
     }
 
     const prompt = buildTestGenerationPrompt(diffs);
-    const response = await this.chat([{ role: 'user', content: prompt }]);
+    const response = await this.chat([{ role: 'user', content: prompt }], { repoId });
     const parsed = this.parseJson<any[]>(response) ?? [];
     if (parsed.length === 0) {
       throw new InternalServerErrorException('AI ไม่สามารถสร้าง test case ได้ กรุณาลองใหม่');
@@ -186,13 +208,13 @@ export class AiService {
 
   // ── Commit Analysis ───────────────────────────────────────────────────
 
-  async analyzeCommit(commitData: string) {
-    if (!(await this.isRemoteAiAvailable())) {
+  async analyzeCommit(commitData: string, options?: AiExecutionOptions) {
+    if (await this.shouldUseOfflineMode(options) || !(await this.isRemoteAiAvailable())) {
       this.logger.warn('AI offline — using heuristic commit analysis');
       return heuristicAnalyzeCommit(commitData);
     }
     const prompt = buildCommitAnalysisPrompt(commitData);
-    const response = await this.chat([{ role: 'user', content: prompt }]);
+    const response = await this.chat([{ role: 'user', content: prompt }], options);
     const parsed = this.parseJson<{
       summary: string;
       riskLevel: string;
@@ -212,13 +234,13 @@ export class AiService {
 
   // ── What To Test ──────────────────────────────────────────────────────
 
-  async getWhatToTest(commitsData: string) {
-    if (!(await this.isRemoteAiAvailable())) {
+  async getWhatToTest(commitsData: string, options?: AiExecutionOptions) {
+    if (await this.shouldUseOfflineMode(options) || !(await this.isRemoteAiAvailable())) {
       this.logger.warn('AI offline — using heuristic what-to-test');
       return heuristicWhatToTest(commitsData);
     }
     const prompt = buildWhatToTestPrompt(commitsData);
-    const response = await this.chat([{ role: 'user', content: prompt }]);
+    const response = await this.chat([{ role: 'user', content: prompt }], options);
     const parsed = this.parseJson<{
       recommendations: string[];
       priority: string;
@@ -236,13 +258,13 @@ export class AiService {
 
   // ── Doc Auto-Update ───────────────────────────────────────────────────
 
-  async autoUpdateDoc(repoInfo: string, existingDoc: string): Promise<string> {
+  async autoUpdateDoc(repoInfo: string, existingDoc: string, options?: AiExecutionOptions): Promise<string> {
     const prompt = buildDocUpdatePrompt(repoInfo, existingDoc);
-    return this.chat([{ role: 'user', content: prompt }]);
+    return this.chat([{ role: 'user', content: prompt }], options);
   }
 
-  async reviewPullRequest(pullRequestData: string) {
-    if (!(await this.isRemoteAiAvailable())) {
+  async reviewPullRequest(pullRequestData: string, options?: AiExecutionOptions) {
+    if (await this.shouldUseOfflineMode(options) || !(await this.isRemoteAiAvailable())) {
       return {
         summary: 'AI service unavailable, so PR review could not be generated.',
         riskLevel: 'medium' as const,
@@ -253,7 +275,7 @@ export class AiService {
     }
 
     const prompt = buildPullRequestReviewPrompt(pullRequestData);
-    const response = await this.chat([{ role: 'user', content: prompt }]);
+    const response = await this.chat([{ role: 'user', content: prompt }], options);
     const parsed = this.parseJson<{
       summary: string;
       riskLevel: string;
