@@ -4,7 +4,6 @@ import { TestCase } from './entities/test-case.entity';
 import { TestCaseFolder } from './entities/test-case-folder.entity';
 import { TestCasesController } from './test-cases.controller';
 import { TestCasesService } from './test-cases.service';
-import { TestExportService } from './test-export.service';
 import { RepositoriesModule } from '../repositories/repositories.module';
 
 @Module({
@@ -13,7 +12,7 @@ import { RepositoriesModule } from '../repositories/repositories.module';
     RepositoriesModule,
   ],
   controllers: [TestCasesController],
-  providers: [TestCasesService, TestExportService],
-  exports: [TestCasesService, TestExportService],
+  providers: [TestCasesService],
+  exports: [TestCasesService],
 })
 export class TestCasesModule {}

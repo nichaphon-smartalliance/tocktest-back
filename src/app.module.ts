@@ -16,7 +16,6 @@ import { GithubAppModule } from './modules/github-app/github-app.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
 import { DockerRunnerModule } from './modules/docker-runner/docker-runner.module';
-import { VisualRegressionModule } from './modules/visual-regression/visual-regression.module';
 
 @Module({
   imports: [
@@ -51,7 +50,6 @@ import { VisualRegressionModule } from './modules/visual-regression/visual-regre
     JobsModule,
     ChatbotModule,
     DockerRunnerModule,
-    VisualRegressionModule,
   ],
 })
 export class AppModule {}

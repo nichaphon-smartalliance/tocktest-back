@@ -17,7 +17,6 @@ async function bootstrap() {
   await ensureRepositoryInstallationSchema(dataSource);
   await ensureWebhookEventErrorColumn(dataSource);
   await ensureTestRunsTable(dataSource);
-  await ensureVisualRegressionTables(dataSource);
 
   app.enableCors({
     origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL : true,
@@ -185,46 +184,6 @@ async function ensureTestRunsTable(dataSource: DataSource) {
     `);
   } catch (error) {
     console.warn('Could not ensure test_runs table:', (error as Error)?.message ?? error);
-  }
-}
-
-async function ensureVisualRegressionTables(dataSource: DataSource) {
-  try {
-    await dataSource.query(`
-      CREATE TABLE IF NOT EXISTS visual_baselines (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        repo_id UUID NOT NULL,
-        user_id UUID NOT NULL,
-        name VARCHAR(500) NOT NULL,
-        url VARCHAR(2000) NOT NULL,
-        viewport VARCHAR(50) NOT NULL DEFAULT '1280x720',
-        screenshot_data TEXT NOT NULL,
-        width INT,
-        height INT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_visual_baselines_repo ON visual_baselines(repo_id, user_id);
-
-      CREATE TABLE IF NOT EXISTS visual_comparisons (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        baseline_id UUID NOT NULL,
-        repo_id UUID NOT NULL,
-        user_id UUID NOT NULL,
-        screenshot_data TEXT NOT NULL,
-        diff_data TEXT,
-        diff_score FLOAT,
-        diff_pixels INT,
-        total_pixels INT,
-        status VARCHAR(20) NOT NULL DEFAULT 'pending',
-        threshold FLOAT NOT NULL DEFAULT 0.01,
-        ai_analysis TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_visual_comparisons_baseline ON visual_comparisons(baseline_id);
-    `);
-  } catch (error) {
-    console.warn('Could not ensure visual regression tables:', (error as Error)?.message ?? error);
   }
 }
 
