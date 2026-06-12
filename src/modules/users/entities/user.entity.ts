@@ -17,8 +17,20 @@ export class User {
   @Column()
   name: string;
 
-  @Column({ name: 'password_hash', select: false })
-  passwordHash: string;
+  @Column({ name: 'password_hash', select: false, nullable: true, type: 'varchar' })
+  passwordHash: string | null;
+
+  @Column({ name: 'github_id', nullable: true, type: 'bigint' })
+  githubId: number | null;
+
+  @Column({ name: 'github_login', nullable: true, type: 'varchar' })
+  githubLogin: string | null;
+
+  @Column({ name: 'auth_provider', default: 'local' })
+  authProvider: string;
+
+  @Column({ name: 'avatar_url', nullable: true, type: 'varchar' })
+  avatarUrl: string | null;
 
   @Column({ default: 'user' })
   role: string;

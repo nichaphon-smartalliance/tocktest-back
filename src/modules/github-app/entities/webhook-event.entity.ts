@@ -29,6 +29,9 @@ export class WebhookEvent {
   @Column({ name: 'processed_at', nullable: true, type: 'timestamptz' })
   processedAt: Date | null;
 
+  @Column({ name: 'error_message', nullable: true, type: 'text' })
+  errorMessage: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

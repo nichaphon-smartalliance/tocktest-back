@@ -73,6 +73,67 @@ export class GithubAppService {
     return this.installationRepo.find({ where: { userId }, order: { createdAt: 'DESC' } });
   }
 
+  async getInstallationRepositories(userId: string, installationId: string) {
+    const installation = await this.installationRepo.findOne({ where: { userId, installationId } });
+    if (!installation) {
+      throw new BadRequestException('ไม่พบ GitHub App installation นี้สำหรับผู้ใช้นี้');
+    }
+
+    const token = await this.getInstallationToken(installationId);
+    const res = await axios.get('https://api.github.com/installation/repositories', {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
+      params: { per_page: 100 },
+    });
+
+    const githubRepos: any[] = res.data?.repositories ?? [];
+    const tracked = await this.repoRepo.find({ where: { installationId } });
+    const trackedByFullName = new Map(tracked.map((r) => [r.fullName, r]));
+
+    return githubRepos.map((repo) => ({
+      githubRepoId: repo.id,
+      fullName: repo.full_name,
+      name: repo.name,
+      private: repo.private,
+      htmlUrl: repo.html_url,
+      defaultBranch: repo.default_branch,
+      tracked: trackedByFullName.has(repo.full_name),
+      repositoryId: trackedByFullName.get(repo.full_name)?.id ?? null,
+    }));
+  }
+
+  async importInstallationRepository(userId: string, installationId: string, fullName: string) {
+    const installation = await this.installationRepo.findOne({ where: { userId, installationId } });
+    if (!installation) {
+      throw new BadRequestException('ไม่พบ GitHub App installation นี้สำหรับผู้ใช้นี้');
+    }
+
+    const token = await this.getInstallationToken(installationId);
+    const res = await axios.get(`https://api.github.com/repos/${fullName}`, {
+      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
+    });
+    const gr = res.data;
+
+    await this.repoRepo.upsert(
+      {
+        userId,
+        installationId,
+        githubRepoId: gr.id,
+        fullName: gr.full_name,
+        name: gr.name,
+        description: gr.description,
+        defaultBranch: gr.default_branch,
+        isPrivate: gr.private,
+        htmlUrl: gr.html_url,
+        cloneUrl: gr.clone_url,
+        ownerLogin: gr.owner?.login,
+        lastSyncedAt: new Date(),
+      },
+      { conflictPaths: ['userId', 'githubRepoId'] },
+    );
+
+    return { imported: true, fullName: gr.full_name };
+  }
+
   async handleInstallationCallback(
     installationId: string | undefined,
     setupAction: string | undefined,
@@ -162,6 +223,7 @@ export class GithubAppService {
       this.logger.error(`Failed to process GitHub webhook (${event}): ${err?.message ?? err}`);
       result = { message: 'Webhook received but processing failed.', error: err?.message ?? String(err) };
       webhookEvent.status = 'failed';
+      webhookEvent.errorMessage = String(err?.message ?? err).slice(0, 2000);
     }
     webhookEvent.processedAt = new Date();
     await this.webhookEventRepo.save(webhookEvent);
@@ -194,8 +256,13 @@ export class GithubAppService {
         };
 
       case 'installation':
-      case 'installation_repositories':
         return this.handleInstallationEvent(action, body);
+
+      case 'installation_repositories':
+        return this.handleInstallationRepositoriesEvent(action, body, installationId);
+
+      case 'repository':
+        return this.handleRepositoryEvent(action, body);
 
       case 'push':
         return this.handlePushEvent(body);
@@ -244,6 +311,57 @@ export class GithubAppService {
     return { message: `Installation '${action ?? 'updated'}' event processed.`, installationId };
   }
 
+  private async handleInstallationRepositoriesEvent(
+    action: string | null,
+    body: any,
+    installationId: string | null,
+  ): Promise<Record<string, unknown>> {
+    if (!installationId) {
+      return { message: 'installation_repositories event missing installation id, ignored.' };
+    }
+
+    const added: any[] = body?.repositories_added ?? [];
+    const removed: any[] = body?.repositories_removed ?? [];
+
+    for (const repo of added) {
+      await this.repoRepo.update({ fullName: repo.full_name }, { installationId });
+    }
+    for (const repo of removed) {
+      await this.repoRepo.update({ fullName: repo.full_name, installationId }, { installationId: null });
+    }
+
+    return {
+      message: `installation_repositories '${action ?? 'updated'}' processed.`,
+      installationId,
+      added: added.map((r) => r.full_name),
+      removed: removed.map((r) => r.full_name),
+    };
+  }
+
+  private async handleRepositoryEvent(action: string | null, body: any): Promise<Record<string, unknown>> {
+    const fullName = body?.repository?.full_name ?? null;
+    if (!fullName) {
+      return { message: 'repository event missing repository info, ignored.' };
+    }
+
+    if (action === 'deleted') {
+      return { message: 'Repository deleted on GitHub. Local record retained for history.', repository: fullName };
+    }
+
+    if (action === 'renamed' || action === 'transferred') {
+      const previousName = body?.changes?.repository?.name?.from ?? body?.changes?.full_name?.from ?? null;
+      if (previousName) {
+        const previousFullName = fullName.includes('/')
+          ? `${fullName.split('/')[0]}/${previousName}`
+          : previousName;
+        await this.repoRepo.update({ fullName: previousFullName }, { fullName, name: body.repository?.name ?? previousName });
+      }
+      return { message: `Repository '${action}' event processed.`, repository: fullName };
+    }
+
+    return { message: `Repository '${action ?? 'updated'}' event recorded (no action needed).`, repository: fullName };
+  }
+
   private async handlePushEvent(body: any): Promise<Record<string, unknown>> {
     const fullName = body?.repository?.full_name ?? null;
     const after = body?.after ?? null;
@@ -277,6 +395,10 @@ export class GithubAppService {
     );
 
     const installationId = body?.installation?.id ? String(body.installation.id) : null;
+    if (installationId && !repo.installationId) {
+      await this.repoRepo.update({ id: repo.id }, { installationId });
+    }
+
     await this.jobsService.enqueue(
       'analyze_commit',
       { repoId: repo.id, commitSha: after, installationId },

@@ -1,6 +1,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { GithubLoginDto } from './dto/github-login.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
 @Controller('api/v1/auth')
@@ -12,5 +13,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('github')
+  @HttpCode(HttpStatus.OK)
+  loginWithGithub(@Body() dto: GithubLoginDto) {
+    return this.authService.loginWithGithub(dto);
   }
 }

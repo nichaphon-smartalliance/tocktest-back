@@ -24,6 +24,9 @@ export class Repository {
   @Column({ name: 'github_token_id', nullable: true, type: 'uuid' })
   githubTokenId: string | null;
 
+  @Column({ name: 'installation_id', nullable: true, type: 'bigint' })
+  installationId: string | null;
+
   @Column({ name: 'github_repo_id', type: 'bigint' })
   githubRepoId: number;
 

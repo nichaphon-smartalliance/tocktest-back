@@ -12,6 +12,9 @@ async function bootstrap() {
   await ensureGithubTokenExpiresAt(dataSource);
   await ensureBackgroundJobsTable(dataSource);
   await ensureGithubOAuthAppSchema(dataSource);
+  await ensureGithubLoginSchema(dataSource);
+  await ensureRepositoryInstallationSchema(dataSource);
+  await ensureWebhookEventErrorColumn(dataSource);
 
   app.enableCors({
     origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL : true,
@@ -118,6 +121,40 @@ async function ensureBackgroundJobsTable(dataSource: DataSource) {
     `);
   } catch (error) {
     console.warn('Could not ensure background_jobs table:', (error as Error)?.message ?? error);
+  }
+}
+
+async function ensureGithubLoginSchema(dataSource: DataSource) {
+  try {
+    await dataSource.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL');
+    await dataSource.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS github_id BIGINT');
+    await dataSource.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS github_login VARCHAR(255)');
+    await dataSource.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) NOT NULL DEFAULT 'local'");
+    await dataSource.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500)');
+    await dataSource.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id) WHERE github_id IS NOT NULL',
+    );
+  } catch (error) {
+    console.warn('Could not ensure GitHub login schema:', (error as Error)?.message ?? error);
+  }
+}
+
+async function ensureRepositoryInstallationSchema(dataSource: DataSource) {
+  try {
+    await dataSource.query('ALTER TABLE repositories ADD COLUMN IF NOT EXISTS installation_id BIGINT');
+    await dataSource.query(
+      'CREATE INDEX IF NOT EXISTS idx_repositories_installation_id ON repositories(installation_id)',
+    );
+  } catch (error) {
+    console.warn('Could not ensure repository installation schema:', (error as Error)?.message ?? error);
+  }
+}
+
+async function ensureWebhookEventErrorColumn(dataSource: DataSource) {
+  try {
+    await dataSource.query('ALTER TABLE github_webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT');
+  } catch (error) {
+    console.warn('Could not ensure webhook event error column:', (error as Error)?.message ?? error);
   }
 }
 
