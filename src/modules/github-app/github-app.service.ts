@@ -9,6 +9,8 @@ import { GithubInstallation } from './entities/github-installation.entity';
 import { WebhookEvent } from './entities/webhook-event.entity';
 import { Repository } from '../repositories/entities/repository.entity';
 import { CommitAnalysis } from '../analysis/entities/commit-analysis.entity';
+import { AiService } from '../ai/ai.service';
+import { buildPrReviewInput, formatPrReviewComment, reviewToCommitStatus } from '../../common/utils/pr-review.util';
 
 type GithubWebhookHeaders = {
   event?: string;
@@ -30,6 +32,7 @@ export class GithubAppService {
     private readonly repoRepo: TypeOrmRepo<Repository>,
     @InjectRepository(CommitAnalysis)
     private readonly commitAnalysisRepo: TypeOrmRepo<CommitAnalysis>,
+    private readonly aiService: AiService,
   ) {}
 
   getSetupStatus() {
@@ -282,19 +285,27 @@ export class GithubAppService {
 
     if (installationId && fullName && prNumber && headSha && trackedActions.includes(action ?? '')) {
       try {
-        await this.postIssueComment(
-          installationId,
-          fullName,
-          prNumber,
-          `🤖 TockTest ได้รับ Pull Request นี้แล้ว และคิวสำหรับวิเคราะห์ commit ไว้แล้ว (head: \`${String(headSha).slice(0, 7)}\`)`,
-        );
         await this.postCommitStatus(
           installationId,
           fullName,
           headSha,
           'pending',
-          'TockTest QA analysis queued',
-          'tocktest/qa',
+          'TockTest AI review in progress',
+          'tocktest/ai-review',
+        );
+
+        const token = await this.getInstallationToken(installationId);
+        const pullRequest = await this.aiService.fetchPullRequestDetail(fullName, token, prNumber);
+        const review = await this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest));
+
+        await this.postIssueComment(installationId, fullName, prNumber, formatPrReviewComment(review));
+        await this.postCommitStatus(
+          installationId,
+          fullName,
+          headSha,
+          reviewToCommitStatus(review),
+          review.summary || 'TockTest AI review completed',
+          'tocktest/ai-review',
         );
       } catch (err) {
         this.logger.warn(`Failed to write back to ${fullName}#${prNumber}: ${err?.message ?? err}`);

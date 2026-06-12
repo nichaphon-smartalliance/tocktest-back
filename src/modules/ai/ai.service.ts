@@ -311,6 +311,29 @@ export class AiService {
     return res.data;
   }
 
+  async postIssueComment(fullName: string, token: string, issueNumber: number, body: string): Promise<void> {
+    await axios.post(
+      `https://api.github.com/repos/${fullName}/issues/${issueNumber}/comments`,
+      { body },
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } },
+    );
+  }
+
+  async postCommitStatus(
+    fullName: string,
+    token: string,
+    sha: string,
+    state: 'pending' | 'success' | 'failure' | 'error',
+    description: string,
+    context = 'tocktest/ai-review',
+  ): Promise<void> {
+    await axios.post(
+      `https://api.github.com/repos/${fullName}/statuses/${sha}`,
+      { state, description: description.slice(0, 140), context },
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } },
+    );
+  }
+
   async fetchPullRequestDetail(fullName: string, pat: string, prNumber: number): Promise<any> {
     const [prRes, filesRes] = await Promise.all([
       axios.get(`https://api.github.com/repos/${fullName}/pulls/${prNumber}`, {

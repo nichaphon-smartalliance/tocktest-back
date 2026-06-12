@@ -56,7 +56,17 @@ export class AnalysisController {
     @Param('repoId') repoId: string,
     @Param('pullRequestNumber') pullRequestNumber: string,
   ) {
-    if (!user?.id) throw new UnauthorizedException('à¸à¸£à¸¸à¸“à¸²à¹€à¸‚à¹‰à¸²à¸ªà¸¹à¹ˆà¸£à¸°à¸šà¸šà¸à¹ˆà¸­à¸™');
+    if (!user?.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
     return this.service.reviewPullRequest(user.id, repoId, Number(pullRequestNumber));
+  }
+
+  @Post(':repoId/pull-requests/:pullRequestNumber/review/comment')
+  reviewAndCommentPullRequest(
+    @CurrentUser() user: User,
+    @Param('repoId') repoId: string,
+    @Param('pullRequestNumber') pullRequestNumber: string,
+  ) {
+    if (!user?.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
+    return this.service.reviewAndCommentPullRequest(user.id, repoId, Number(pullRequestNumber));
   }
 }

@@ -7,6 +7,7 @@ import { RepositoriesService } from '../repositories/repositories.service';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
 import { toPageResult } from '../../common/dto/pagination.dto';
 import { normalizeRiskLevel } from '../../common/utils/normalize-ai';
+import { buildPrReviewInput, formatPrReviewComment, reviewToCommitStatus } from '../../common/utils/pr-review.util';
 
 @Injectable()
 export class AnalysisService {
@@ -186,34 +187,34 @@ export class AnalysisService {
   async reviewPullRequest(userId: string, repoId: string, pullRequestNumber: number) {
     const repo = await this.repoService.findOneForUser(userId, repoId);
     const pat = await this.githubTokensService.getDecryptedToken(userId);
-    if (!pat) throw new NotFoundException('à¹„à¸¡à¹ˆà¸žà¸š GitHub Token');
+    if (!pat) throw new NotFoundException('ไม่พบ GitHub Token');
 
     const pullRequest = await this.aiService.fetchPullRequestDetail(repo.fullName, pat, pullRequestNumber);
-    const reviewInput = JSON.stringify(
-      {
-        number: pullRequest.number,
-        title: pullRequest.title,
-        state: pullRequest.state,
-        body: pullRequest.body,
-        headRef: pullRequest.head?.ref,
-        baseRef: pullRequest.base?.ref,
-        changedFiles: pullRequest.changed_files,
-        additions: pullRequest.additions,
-        deletions: pullRequest.deletions,
-        files: (pullRequest.files ?? []).slice(0, 15).map((file: any) => ({
-          filename: file.filename,
-          status: file.status,
-          additions: file.additions,
-          deletions: file.deletions,
-          changes: file.changes,
-          patch: file.patch?.slice(0, 1200) ?? null,
-        })),
-      },
-      null,
-      2,
-    );
+    return this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest));
+  }
 
-    return this.aiService.reviewPullRequest(reviewInput);
+  async reviewAndCommentPullRequest(userId: string, repoId: string, pullRequestNumber: number) {
+    const repo = await this.repoService.findOneForUser(userId, repoId);
+    const pat = await this.githubTokensService.getDecryptedToken(userId);
+    if (!pat) throw new NotFoundException('ไม่พบ GitHub Token');
+
+    const pullRequest = await this.aiService.fetchPullRequestDetail(repo.fullName, pat, pullRequestNumber);
+    const review = await this.aiService.reviewPullRequest(buildPrReviewInput(pullRequest));
+
+    await this.aiService.postIssueComment(repo.fullName, pat, pullRequestNumber, formatPrReviewComment(review));
+
+    const headSha = pullRequest.head?.sha;
+    if (headSha) {
+      await this.aiService.postCommitStatus(
+        repo.fullName,
+        pat,
+        headSha,
+        reviewToCommitStatus(review),
+        review.summary || 'TockTest AI review completed',
+      );
+    }
+
+    return { ...review, posted: true };
   }
 
   async syncCommitsFromGithub(userId: string, repoId: string, branch?: string) {

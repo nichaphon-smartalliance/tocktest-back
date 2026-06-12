@@ -6,9 +6,10 @@ import { GithubInstallation } from './entities/github-installation.entity';
 import { WebhookEvent } from './entities/webhook-event.entity';
 import { Repository } from '../repositories/entities/repository.entity';
 import { CommitAnalysis } from '../analysis/entities/commit-analysis.entity';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GithubInstallation, WebhookEvent, Repository, CommitAnalysis])],
+  imports: [TypeOrmModule.forFeature([GithubInstallation, WebhookEvent, Repository, CommitAnalysis]), AiModule],
   controllers: [GithubAppController],
   providers: [GithubAppService],
   exports: [GithubAppService],
