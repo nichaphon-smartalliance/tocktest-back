@@ -222,7 +222,7 @@ export class DashboardService {
         status: hasAnyTests ? 'partial' : 'missing',
         description: hasAnyTests
           ? 'Test cases exist in the product, but isolated execution in containers or workers is not implemented yet.'
-          : 'A secure runner for executing generated Playwright or Cypress tests is still needed.',
+          : 'A secure runner for executing generated Cypress tests is still needed.',
       },
     ] as const;
   }

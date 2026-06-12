@@ -71,15 +71,11 @@ export class TestCasesController {
     @Query('ids') ids: string,
     @Res() res: Response,
   ) {
-    const fw = framework === 'cypress' ? 'cypress' : 'playwright';
     const idList = ids ? ids.split(',').filter(Boolean) : [];
     const repo = await this.service.getRepoForExport(user.id, repoId);
     const testCases = await this.service.findAllForExport(user.id, repoId, idList);
-    const content =
-      fw === 'cypress'
-        ? this.exportService.generateCypress(repo.fullName, testCases)
-        : this.exportService.generatePlaywright(repo.fullName, testCases);
-    const filename = `${repo.fullName.replace('/', '_')}.${fw === 'cypress' ? 'cy' : 'spec'}.ts`;
+    const content = this.exportService.generateCypress(repo.fullName, testCases);
+    const filename = `${repo.fullName.replace('/', '_')}.cy.ts`;
     res.setHeader('Content-Type', 'text/typescript; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(content);

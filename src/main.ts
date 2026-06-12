@@ -170,7 +170,7 @@ async function ensureTestRunsTable(dataSource: DataSource) {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         repo_id UUID NOT NULL,
         user_id UUID NOT NULL,
-        framework VARCHAR(50) NOT NULL DEFAULT 'playwright',
+        framework VARCHAR(50) NOT NULL DEFAULT 'cypress',
         file_content TEXT NOT NULL,
         status VARCHAR(20) NOT NULL DEFAULT 'queued',
         output TEXT,

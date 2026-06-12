@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class RunTestsDto {
   @IsString()
@@ -6,6 +6,6 @@ export class RunTestsDto {
   fileContent: string;
 
   @IsOptional()
-  @IsIn(['playwright', 'cypress'])
-  framework?: 'playwright' | 'cypress';
+  @IsString()
+  framework?: 'cypress';
 }

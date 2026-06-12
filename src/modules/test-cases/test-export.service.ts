@@ -15,31 +15,6 @@ function slugify(s: string): string {
 
 @Injectable()
 export class TestExportService {
-  generatePlaywright(repoName: string, testCases: TestCase[]): string {
-    const describe = slugify(repoName) || 'generated';
-    const tests = testCases
-      .map((tc) => {
-        const steps = (tc.steps ?? []).map((s) => `  // ${s.description}`).join('\n');
-        const expected = tc.expectedResult ? `  // Expected: ${tc.expectedResult.replace(/\n/g, ' ')}` : '';
-        return `
-  test('${esc(tc.title)}', async ({ page }) => {
-    // Priority: ${tc.priority} | Type: ${tc.testType}
-${steps}
-${expected}
-    // TODO: implement assertions
-    await expect(page).toBeTruthy();
-  });`;
-      })
-      .join('\n');
-
-    return `import { test, expect } from '@playwright/test';
-
-test.describe('${esc(repoName)} — Generated QA', () => {
-${tests}
-});
-`;
-  }
-
   generateCypress(repoName: string, testCases: TestCase[]): string {
     const tests = testCases
       .map((tc) => {

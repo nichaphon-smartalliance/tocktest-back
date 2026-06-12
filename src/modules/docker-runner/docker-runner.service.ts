@@ -12,10 +12,7 @@ import type { RunTestsDto } from './dto/run-tests.dto';
 
 const execAsync = promisify(exec);
 
-const DOCKER_IMAGES: Record<string, string> = {
-  playwright: 'mcr.microsoft.com/playwright:v1.44.0-jammy',
-  cypress: 'cypress/included:13.6.4',
-};
+const CYPRESS_IMAGE = 'cypress/included:13.6.4';
 
 @Injectable()
 export class DockerRunnerService {
@@ -87,29 +84,14 @@ export class DockerRunnerService {
     const start = Date.now();
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tocktest-'));
-    const framework = run.framework === 'cypress' ? 'cypress' : 'playwright';
-    const ext = framework === 'cypress' ? 'cy.ts' : 'spec.ts';
-    const testFile = path.join(tmpDir, `test.${ext}`);
+    const testFile = path.join(tmpDir, 'test.cy.ts');
     fs.writeFileSync(testFile, run.fileContent, 'utf-8');
 
-    const image = DOCKER_IMAGES[framework];
-    const containerTestPath = `/tests/test.${ext}`;
-    const cmd =
-      framework === 'playwright'
-        ? `docker run --rm -v "${tmpDir}:/tests" ${image} npx playwright test /tests/test.spec.ts --reporter=json 2>&1`
-        : `docker run --rm -v "${tmpDir}:/e2e/cypress/e2e" ${image} 2>&1`;
+    const cmd = `docker run --rm -v "${tmpDir}:/e2e/cypress/e2e" ${CYPRESS_IMAGE} 2>&1`;
 
     try {
       const { stdout } = await execAsync(cmd, { timeout: 120_000 });
       const durationMs = Date.now() - start;
-
-      let testResults: Record<string, unknown> | null = null;
-      if (framework === 'playwright') {
-        try {
-          const jsonMatch = stdout.match(/^\{[\s\S]*\}$/m);
-          if (jsonMatch) testResults = JSON.parse(jsonMatch[0]);
-        } catch { /* ignore */ }
-      }
 
       const passed = !stdout.includes('failed') && !stdout.includes('Error');
       await this.runRepo.update(runId, {
@@ -117,7 +99,7 @@ export class DockerRunnerService {
         output: stdout.slice(0, 50_000),
         exitCode: 0,
         durationMs,
-        testResults: testResults as any,
+        testResults: null,
       });
     } catch (err: any) {
       const durationMs = Date.now() - start;
