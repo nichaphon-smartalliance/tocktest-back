@@ -13,7 +13,7 @@ import {
   buildPullRequestReviewPrompt,
 } from './prompts';
 import { normalizePriority, normalizeRiskLevel, normalizeTestType } from '../../common/utils/normalize-ai';
-import { heuristicAnalyzeCommit, heuristicGenerateTestCases, heuristicWhatToTest } from '../../common/utils/heuristic-ai';
+import { heuristicAnalyzeCommit, heuristicGenerateTestCases, heuristicWhatToTest, heuristicChat } from '../../common/utils/heuristic-ai';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -47,8 +47,12 @@ export class AiService {
 
   // ── Core AI chat ──────────────────────────────────────────────────────
 
-  /** Returns true if any AI backend is usable. */
+  /** Returns true if any AI backend is usable (including heuristic fallback). */
   async isAvailable(): Promise<boolean> {
+    return true; // heuristic fallback always available
+  }
+
+  private async isRemoteAiAvailable(): Promise<boolean> {
     if (this.openaiApiKey) return true;
     if (this.availCache && Date.now() - this.availCache.ts < this.AVAIL_TTL_MS) {
       return this.availCache.ok;
@@ -71,28 +75,29 @@ export class AiService {
     if (this.openaiApiKey) {
       return this.openaiChat(messages);
     }
-    if (!(await this.isAvailable())) {
-      throw new ServiceUnavailableException('AI service unavailable');
+    if (await this.isRemoteAiAvailable()) {
+      try {
+        const res = await axios.post(
+          `${this.apiUrl}/chat`,
+          { messages, max_tokens: 4096 },
+          { timeout: 60000 },
+        );
+        const content =
+          res.data?.choices?.[0]?.message?.content ??
+          res.data?.data?.content ??
+          res.data?.content ??
+          res.data?.response ??
+          res.data?.message ??
+          '';
+        this.logger.debug(`AI response length: ${content.length} chars`);
+        return content;
+      } catch (err: any) {
+        this.logger.error(`AI API call failed: ${err.message}`);
+      }
     }
-    try {
-      const res = await axios.post(
-        `${this.apiUrl}/chat`,
-        { messages, max_tokens: 4096 },
-        { timeout: 60000 },
-      );
-      const content =
-        res.data?.choices?.[0]?.message?.content ??
-        res.data?.data?.content ??
-        res.data?.content ??
-        res.data?.response ??
-        res.data?.message ??
-        '';
-      this.logger.debug(`AI response length: ${content.length} chars`);
-      return content;
-    } catch (err: any) {
-      this.logger.error(`AI API call failed: ${err.message}`);
-      throw new InternalServerErrorException('AI request failed');
-    }
+    // Heuristic fallback — uses real repo data from context, no external AI needed
+    this.logger.warn('AI offline — using heuristic chat');
+    return heuristicChat(messages);
   }
 
   private async openaiChat(messages: ChatMessage[]): Promise<string> {
@@ -158,7 +163,7 @@ export class AiService {
         folderId: null,
       }));
 
-    if (!(await this.isAvailable())) {
+    if (!(await this.isRemoteAiAvailable())) {
       this.logger.warn('AI offline — using heuristic test case generation');
       const testCases = heuristicGenerateTestCases(diffs);
       return { testCases, logId: null, model: 'heuristic', tokensUsed: 0 };
@@ -182,7 +187,7 @@ export class AiService {
   // ── Commit Analysis ───────────────────────────────────────────────────
 
   async analyzeCommit(commitData: string) {
-    if (!(await this.isAvailable())) {
+    if (!(await this.isRemoteAiAvailable())) {
       this.logger.warn('AI offline — using heuristic commit analysis');
       return heuristicAnalyzeCommit(commitData);
     }
@@ -208,7 +213,7 @@ export class AiService {
   // ── What To Test ──────────────────────────────────────────────────────
 
   async getWhatToTest(commitsData: string) {
-    if (!(await this.isAvailable())) {
+    if (!(await this.isRemoteAiAvailable())) {
       this.logger.warn('AI offline — using heuristic what-to-test');
       return heuristicWhatToTest(commitsData);
     }
@@ -237,7 +242,7 @@ export class AiService {
   }
 
   async reviewPullRequest(pullRequestData: string) {
-    if (!(await this.isAvailable())) {
+    if (!(await this.isRemoteAiAvailable())) {
       return {
         summary: 'AI service unavailable, so PR review could not be generated.',
         riskLevel: 'medium' as const,
