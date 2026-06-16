@@ -86,7 +86,7 @@ export class GithubTokensService {
     const clientId = this.config.get<string>('GITHUB_OAUTH_CLIENT_ID');
     const callbackUrl = this.config.get<string>('GITHUB_OAUTH_CALLBACK_URL');
     if (!clientId || !callbackUrl) {
-      throw new BadRequestException('GitHub OAuth ยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์');
+      throw new BadRequestException('GitHub OAuth is not configured on the backend.');
     }
 
     const state = jwt.sign({ userId, purpose: 'github-oauth' }, this.config.get<string>('JWT_SECRET') as string, {
@@ -109,10 +109,10 @@ export class GithubTokensService {
     try {
       payload = jwt.verify(state, this.config.get<string>('JWT_SECRET') as string) as unknown as typeof payload;
     } catch {
-      throw new UnauthorizedException('ลิงก์เชื่อมต่อ GitHub หมดอายุหรือไม่ถูกต้อง');
+      throw new UnauthorizedException('GitHub connect link is invalid or expired.');
     }
     if (payload.purpose !== 'github-oauth' || !payload.userId) {
-      throw new UnauthorizedException('สถานะการเชื่อมต่อ GitHub ไม่ถูกต้อง');
+      throw new UnauthorizedException('GitHub OAuth state is invalid.');
     }
 
     const tokenRes = await axios.post(
@@ -128,7 +128,7 @@ export class GithubTokensService {
 
     const accessToken = tokenRes.data?.access_token;
     if (!accessToken) {
-      throw new UnauthorizedException('ไม่สามารถรับ access token จาก GitHub ได้');
+      throw new UnauthorizedException('Could not obtain an access token from GitHub.');
     }
 
     const userRes = await axios.get('https://api.github.com/user', {
