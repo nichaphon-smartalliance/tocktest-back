@@ -248,7 +248,7 @@ export class DocsService {
         },
       );
     } catch (error: any) {
-      await this.markStatus(repoId, 'error', error.message ?? 'Documentation generation failed.');
+      await this.markStatus(repoId, 'error', this.describeGenerationError(error));
       throw error;
     }
   }
@@ -305,6 +305,40 @@ export class DocsService {
       docsSyncMessage: message,
       ...extra,
     });
+  }
+
+  private describeGenerationError(error: unknown): string {
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const apiMessage =
+        typeof error.response?.data?.message === 'string'
+          ? error.response.data.message
+          : Array.isArray(error.response?.data?.message)
+            ? error.response?.data?.message.join(', ')
+            : null;
+
+      if (status === 401) {
+        return 'GitHub token is invalid or expired. Reconnect GitHub and try generating docs again.';
+      }
+
+      if (status === 403) {
+        return 'GitHub denied access to this repository or rate-limited the request. Check token scopes and repository access.';
+      }
+
+      if (status === 404) {
+        return 'Repository or branch was not found on GitHub. Check repository access and default branch settings.';
+      }
+
+      if (apiMessage) {
+        return `GitHub API error: ${apiMessage}`;
+      }
+    }
+
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return 'Documentation generation failed.';
   }
 
   private async fetchBranchHead(fullName: string, token: string, branch: string) {
