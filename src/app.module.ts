@@ -32,7 +32,7 @@ import { DockerRunnerModule } from './modules/docker-runner/docker-runner.module
         password: config.get('DB_PASSWORD', 'postgres'),
         database: config.get('DB_NAME', 'tocktest_db'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false, // Back to false after column is created
+        synchronize: true,
         logging: config.get('NODE_ENV') === 'development',
       }),
     }),

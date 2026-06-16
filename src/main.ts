@@ -45,10 +45,15 @@ async function bootstrap() {
 
 async function ensureGithubTokenExpiresAt(dataSource: DataSource) {
   try {
-    const result = await dataSource.query(
+    const tableExists = await dataSource.query(
+      "SELECT 1 FROM information_schema.tables WHERE table_name = 'github_tokens'",
+    );
+    if (!Array.isArray(tableExists) || tableExists.length === 0) return;
+
+    const colExists = await dataSource.query(
       "SELECT column_name FROM information_schema.columns WHERE table_name = 'github_tokens' AND column_name = 'expires_at'",
     );
-    if (!Array.isArray(result) || result.length === 0) {
+    if (!Array.isArray(colExists) || colExists.length === 0) {
       console.log('Adding missing expires_at column to github_tokens table');
       await dataSource.query('ALTER TABLE github_tokens ADD COLUMN expires_at timestamptz');
     }

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ILike, In, Repository as TypeOrmRepo } from 'typeorm';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -11,6 +11,7 @@ import { Repository } from '../repositories/entities/repository.entity';
 import type { RunTestsDto } from './dto/run-tests.dto';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const CYPRESS_IMAGE = 'cypress/included:13.6.4';
 
 @Injectable()
@@ -131,15 +132,15 @@ export class DockerRunnerService {
 
     try {
       this.writeSandboxProject(tmpDir, run.fileContent);
-      const cmd = [
-        'docker run --rm',
-        `-v "${tmpDir}:/e2e"`,
-        '-w /e2e',
+      const { stdout, stderr } = await execFileAsync('docker', [
+        'run', '--rm',
+        '-v', `${tmpDir}:/e2e`,
+        '-w', '/e2e',
         CYPRESS_IMAGE,
-        'npx cypress run --config-file cypress.config.js --spec cypress/e2e/test.cy.ts',
-      ].join(' ');
-
-      const { stdout, stderr } = await execAsync(cmd, { timeout: 180_000, maxBuffer: 1024 * 1024 * 4 });
+        'npx', 'cypress', 'run',
+        '--config-file', 'cypress.config.js',
+        '--spec', 'cypress/e2e/test.cy.ts',
+      ], { timeout: 180_000, maxBuffer: 1024 * 1024 * 4 });
       const durationMs = Date.now() - start;
       const output = `${stdout ?? ''}${stderr ?? ''}`;
       const passed = this.isRunSuccessful(output);
