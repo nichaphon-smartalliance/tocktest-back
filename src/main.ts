@@ -1,5 +1,6 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 import { DataSource } from 'typeorm';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -22,6 +23,10 @@ async function bootstrap() {
     origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL : true,
     credentials: true,
   });
+
+  // Rich-text docs may embed base64 images, so allow larger JSON bodies.
+  app.use(json({ limit: '12mb' }));
+  app.use(urlencoded({ extended: true, limit: '12mb' }));
 
   app.useGlobalPipes(
     new ValidationPipe({
