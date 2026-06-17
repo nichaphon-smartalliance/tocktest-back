@@ -37,7 +37,9 @@ export class GithubTokensService {
   }
 
   private toPublicToken(token: GithubToken) {
-    const { tokenEncrypted: _tokenEncrypted, user: _user, ...safe } = token;
+    const safe = { ...token } as Partial<GithubToken>;
+    delete safe.tokenEncrypted;
+    delete safe.user;
     return safe;
   }
 

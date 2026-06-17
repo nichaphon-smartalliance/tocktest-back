@@ -136,7 +136,6 @@ export class DashboardService {
   }) {
     const hasRepos = input.totalRepos > 0;
     const hasGeneratedTests = input.aiGeneratedCount > 0;
-    const hasAnyTests = input.totalTestCases > 0;
     const githubAppConfigured =
       !!this.config.get<string>('GITHUB_APP_ID') &&
       !!this.config.get<string>('GITHUB_APP_PRIVATE_KEY');

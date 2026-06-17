@@ -30,14 +30,18 @@
     "typeorm": "^0.3.20"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@nestjs/cli": "^10.4.9",
     "@nestjs/testing": "^10.4.15",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5",
     "@types/node": "^22",
     "@types/passport-jwt": "^4.0.1",
+    "eslint": "^10.5.0",
+    "globals": "^17.6.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "typescript-eslint": "^8.61.1"
   }
 }

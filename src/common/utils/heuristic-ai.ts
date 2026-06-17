@@ -139,7 +139,7 @@ function parseCommitStats(commitData: string): CommitStats {
 }
 
 function scoreRisk(files: number, churn: number): 'low' | 'medium' | 'high' | 'critical' {
-  let level: 'low' | 'medium' | 'high' | 'critical' = 'low';
+  let level: 'low' | 'medium' | 'high' | 'critical';
   if (churn < 50) level = 'low';
   else if (churn < 300) level = 'medium';
   else if (churn < 1000) level = 'high';

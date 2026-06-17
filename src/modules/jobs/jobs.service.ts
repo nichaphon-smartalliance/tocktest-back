@@ -22,18 +22,27 @@ export class JobsService {
   }
 
   async claimNext(): Promise<BackgroundJob | null> {
-    const now = new Date();
-    const job = await this.jobRepo.findOne({
-      where: { status: 'pending', scheduledAt: LessThanOrEqual(now) },
-      order: { scheduledAt: 'ASC', createdAt: 'ASC' },
-    });
-    if (!job) return null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const now = new Date();
+      const job = await this.jobRepo.findOne({
+        where: { status: 'pending', scheduledAt: LessThanOrEqual(now) },
+        order: { scheduledAt: 'ASC', createdAt: 'ASC' },
+      });
+      if (!job) return null;
 
-    job.status = 'processing';
-    job.startedAt = now;
-    job.attempts += 1;
-    await this.jobRepo.save(job);
-    return job;
+      const claimed = await this.jobRepo.update(
+        { id: job.id, status: 'pending' },
+        { status: 'processing', startedAt: now, attempts: job.attempts + 1 },
+      );
+      if (claimed.affected === 1) {
+        job.status = 'processing';
+        job.startedAt = now;
+        job.attempts += 1;
+        return job;
+      }
+    }
+
+    return null;
   }
 
   async complete(id: string) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res, ParseIntPipe, Optional } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -66,7 +66,7 @@ export class GithubAppController {
     @Query('limit') limit?: number,
     @Query('status') status?: string,
   ) {
-    return this.githubAppService.getWebhookEvents(limit, status);
+    return this.githubAppService.getWebhookEvents(user.id, limit, status);
   }
 
   @Post('webhook-events/:eventId/replay')
@@ -74,7 +74,7 @@ export class GithubAppController {
     @CurrentUser() user: User,
     @Param('eventId') eventId: string,
   ) {
-    return this.githubAppService.replayWebhookEvent(eventId);
+    return this.githubAppService.replayWebhookEvent(user.id, eventId);
   }
 
   @Public()

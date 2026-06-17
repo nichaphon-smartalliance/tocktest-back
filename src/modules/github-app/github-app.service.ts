@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, UnauthorizedException, BadRequestException, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Logger, UnauthorizedException, BadRequestException, ForbiddenException, forwardRef } from '@nestjs/common';
 import { JobsService } from '../jobs/jobs.service';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -479,12 +479,32 @@ export class GithubAppService {
     return res.data.token;
   }
 
-  async getWebhookEvents(limit = 50, status?: string) {
+  async getWebhookEvents(userId: string, limit = 50, status?: string) {
+    const [installations, repositories] = await Promise.all([
+      this.installationRepo.find({ where: { userId } }),
+      this.repoRepo.find({ where: { userId } }),
+    ]);
+    const installationIds = installations.map((item) => item.installationId);
+    const repoNames = repositories.map((item) => item.fullName);
+    if (installationIds.length === 0 && repoNames.length === 0) {
+      return [];
+    }
+
     const qb = this.webhookEventRepo
       .createQueryBuilder('e')
       .orderBy('e.createdAt', 'DESC')
       .take(Math.min(Number(limit) || 50, 200));
     if (status) qb.where('e.status = :status', { status });
+    if (installationIds.length > 0 && repoNames.length > 0) {
+      qb.andWhere('(e.installationId IN (:...installationIds) OR e.repoFullName IN (:...repoNames))', {
+        installationIds,
+        repoNames,
+      });
+    } else if (installationIds.length > 0) {
+      qb.andWhere('e.installationId IN (:...installationIds)', { installationIds });
+    } else {
+      qb.andWhere('e.repoFullName IN (:...repoNames)', { repoNames });
+    }
     const events = await qb.getMany();
     return events.map((e) => ({
       id: e.id,
@@ -499,9 +519,10 @@ export class GithubAppService {
     }));
   }
 
-  async replayWebhookEvent(eventId: string) {
+  async replayWebhookEvent(userId: string, eventId: string) {
     const event = await this.webhookEventRepo.findOne({ where: { id: eventId } });
     if (!event) throw new BadRequestException('Webhook event not found');
+    await this.assertUserCanAccessEvent(userId, event);
 
     event.status = 'replaying';
     await this.webhookEventRepo.save(event);
@@ -544,6 +565,24 @@ export class GithubAppService {
       { state, description, context },
       { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } },
     );
+  }
+
+  private async assertUserCanAccessEvent(userId: string, event: WebhookEvent) {
+    if (event.installationId) {
+      const installation = await this.installationRepo.findOne({
+        where: { userId, installationId: String(event.installationId) },
+      });
+      if (installation) return;
+    }
+
+    if (event.repoFullName) {
+      const repository = await this.repoRepo.findOne({
+        where: { userId, fullName: event.repoFullName },
+      });
+      if (repository) return;
+    }
+
+    throw new ForbiddenException('You do not have access to this webhook event');
   }
 
   private verifySignature(rawBody: Buffer | string | undefined, signature256?: string) {
