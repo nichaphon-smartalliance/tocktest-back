@@ -15,9 +15,7 @@ async function bootstrap() {
   await ensureGithubOAuthAppSchema(dataSource);
   await ensureGithubLoginSchema(dataSource);
   await ensureRepositoryInstallationSchema(dataSource);
-  await ensureWebhookEventErrorColumn(dataSource);
   await ensureRepoSettingsEnhancements(dataSource);
-  await ensureTestRunsTable(dataSource);
 
   app.enableCors({
     origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL : true,
@@ -90,24 +88,6 @@ async function ensureGithubOAuthAppSchema(dataSource: DataSource) {
     await dataSource.query(
       'CREATE INDEX IF NOT EXISTS idx_github_installations_user_id ON github_installations(user_id)',
     );
-
-    await dataSource.query(`
-      CREATE TABLE IF NOT EXISTS github_webhook_events (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        installation_id BIGINT,
-        event VARCHAR(100) NOT NULL,
-        action VARCHAR(100),
-        repo_full_name VARCHAR(255),
-        delivery_id VARCHAR(100),
-        status VARCHAR(20) NOT NULL DEFAULT 'received',
-        payload JSONB,
-        processed_at TIMESTAMPTZ,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-    await dataSource.query(
-      'CREATE INDEX IF NOT EXISTS idx_github_webhook_events_repo ON github_webhook_events(repo_full_name)',
-    );
   } catch (error) {
     console.warn('Could not verify GitHub OAuth/App schema:', error?.message ?? error);
   }
@@ -164,14 +144,6 @@ async function ensureRepositoryInstallationSchema(dataSource: DataSource) {
   }
 }
 
-async function ensureWebhookEventErrorColumn(dataSource: DataSource) {
-  try {
-    await dataSource.query('ALTER TABLE github_webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT');
-  } catch (error) {
-    console.warn('Could not ensure webhook event error column:', (error as Error)?.message ?? error);
-  }
-}
-
 async function ensureRepoSettingsEnhancements(dataSource: DataSource) {
   try {
     await dataSource.query("ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS ai_offline_mode BOOLEAN NOT NULL DEFAULT false");
@@ -184,34 +156,6 @@ async function ensureRepoSettingsEnhancements(dataSource: DataSource) {
     await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_source_cache JSONB');
   } catch (error) {
     console.warn('Could not ensure repo_settings enhancements:', (error as Error)?.message ?? error);
-  }
-}
-
-async function ensureTestRunsTable(dataSource: DataSource) {
-  try {
-    await dataSource.query(`
-      CREATE TABLE IF NOT EXISTS test_runs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        repo_id UUID NOT NULL,
-        user_id UUID NOT NULL,
-        framework VARCHAR(50) NOT NULL DEFAULT 'cypress',
-        name VARCHAR(120) NOT NULL DEFAULT 'Untitled run',
-        file_content TEXT NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'queued',
-        output TEXT,
-        exit_code INT,
-        duration_ms INT,
-        error_message TEXT,
-        test_results JSONB,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_test_runs_repo_user ON test_runs(repo_id, user_id);
-    `);
-    await dataSource.query("ALTER TABLE test_runs ADD COLUMN IF NOT EXISTS name VARCHAR(120) NOT NULL DEFAULT 'Untitled run'");
-    await dataSource.query('CREATE INDEX IF NOT EXISTS idx_test_runs_repo_user_created_at ON test_runs(repo_id, user_id, created_at DESC)');
-  } catch (error) {
-    console.warn('Could not ensure test_runs table:', (error as Error)?.message ?? error);
   }
 }
 

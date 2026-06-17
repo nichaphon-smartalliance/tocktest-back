@@ -16,18 +16,3 @@ CREATE TABLE IF NOT EXISTS github_installations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_github_installations_user_id ON github_installations(user_id);
-
-CREATE TABLE IF NOT EXISTS github_webhook_events (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  installation_id BIGINT,
-  event VARCHAR(100) NOT NULL,
-  action VARCHAR(100),
-  repo_full_name VARCHAR(255),
-  delivery_id VARCHAR(100),
-  status VARCHAR(20) NOT NULL DEFAULT 'received',
-  payload JSONB,
-  processed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_github_webhook_events_repo ON github_webhook_events(repo_full_name);

@@ -15,7 +15,6 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { GithubAppModule } from './modules/github-app/github-app.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
-import { DockerRunnerModule } from './modules/docker-runner/docker-runner.module';
 
 @Module({
   imports: [
@@ -49,7 +48,6 @@ import { DockerRunnerModule } from './modules/docker-runner/docker-runner.module
     GithubAppModule,
     JobsModule,
     ChatbotModule,
-    DockerRunnerModule,
   ],
 })
 export class AppModule {}

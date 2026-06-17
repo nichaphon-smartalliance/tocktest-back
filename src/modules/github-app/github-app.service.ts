@@ -1,21 +1,11 @@
-import { Inject, Injectable, Logger, UnauthorizedException, BadRequestException, ForbiddenException, forwardRef } from '@nestjs/common';
-import { JobsService } from '../jobs/jobs.service';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository as TypeOrmRepo } from 'typeorm';
-import { createHmac, timingSafeEqual } from 'crypto';
 import axios from 'axios';
 import * as jwt from 'jsonwebtoken';
 import { GithubInstallation } from './entities/github-installation.entity';
-import { WebhookEvent } from './entities/webhook-event.entity';
 import { Repository } from '../repositories/entities/repository.entity';
-import { CommitAnalysis } from '../analysis/entities/commit-analysis.entity';
-
-type GithubWebhookHeaders = {
-  event?: string;
-  deliveryId?: string;
-  signature256?: string;
-};
 
 @Injectable()
 export class GithubAppService {
@@ -25,31 +15,24 @@ export class GithubAppService {
     private readonly config: ConfigService,
     @InjectRepository(GithubInstallation)
     private readonly installationRepo: TypeOrmRepo<GithubInstallation>,
-    @InjectRepository(WebhookEvent)
-    private readonly webhookEventRepo: TypeOrmRepo<WebhookEvent>,
     @InjectRepository(Repository)
     private readonly repoRepo: TypeOrmRepo<Repository>,
-    @InjectRepository(CommitAnalysis)
-    private readonly commitAnalysisRepo: TypeOrmRepo<CommitAnalysis>,
-    @Inject(forwardRef(() => JobsService)) private readonly jobsService: JobsService,
   ) {}
 
   getSetupStatus() {
     const appIdConfigured = !!this.config.get<string>('GITHUB_APP_ID');
     const appName = this.config.get<string>('GITHUB_APP_NAME') || null;
     const privateKeyConfigured = !!this.config.get<string>('GITHUB_APP_PRIVATE_KEY');
-    const webhookSecretConfigured = !!this.config.get<string>('GITHUB_WEBHOOK_SECRET');
     const installUrl =
       this.config.get<string>('GITHUB_APP_INSTALL_URL') ||
       (appName ? `https://github.com/apps/${appName}/installations/new` : null);
 
     return {
-      configured: appIdConfigured && privateKeyConfigured && webhookSecretConfigured,
+      configured: appIdConfigured && privateKeyConfigured,
       appName,
       installUrl,
       appIdConfigured,
       privateKeyConfigured,
-      webhookSecretConfigured,
     };
   }
 
@@ -176,278 +159,6 @@ export class GithubAppService {
     return { userId, installationId: installationId ?? null, setupAction: setupAction ?? null };
   }
 
-  // --- Webhook intake & processing ---------------------------------------
-
-  async handleWebhook(headers: GithubWebhookHeaders, rawBody: Buffer | string | undefined, body: any) {
-    const setup = this.getSetupStatus();
-    const event = headers.event || 'unknown';
-    const action = body?.action ?? null;
-    const deliveryId = headers.deliveryId || null;
-    const installationId = body?.installation?.id ? String(body.installation.id) : null;
-    const repoFullName = body?.repository?.full_name ?? null;
-
-    if (setup.webhookSecretConfigured) {
-      this.verifySignature(rawBody, headers.signature256);
-    }
-
-    if (deliveryId) {
-      const dup = await this.webhookEventRepo.findOne({ where: { deliveryId } });
-      if (dup) {
-        return {
-          received: true,
-          event,
-          action,
-          deliveryId,
-          duplicate: true,
-          processedAt: dup.processedAt?.toISOString() ?? null,
-        };
-      }
-    }
-
-    const webhookEvent = this.webhookEventRepo.create({
-      installationId,
-      event,
-      action,
-      repoFullName,
-      deliveryId,
-      payload: body,
-      status: 'received',
-    });
-    await this.webhookEventRepo.save(webhookEvent);
-
-    let result: Record<string, unknown>;
-    try {
-      result = await this.processEvent(event, action, body, installationId);
-      webhookEvent.status = 'processed';
-    } catch (err) {
-      this.logger.error(`Failed to process GitHub webhook (${event}): ${err?.message ?? err}`);
-      result = { message: 'Webhook received but processing failed.', error: err?.message ?? String(err) };
-      webhookEvent.status = 'failed';
-      webhookEvent.errorMessage = String(err?.message ?? err).slice(0, 2000);
-    }
-    webhookEvent.processedAt = new Date();
-    await this.webhookEventRepo.save(webhookEvent);
-
-    this.logger.log(
-      `GitHub webhook received: event=${event} action=${action ?? '-'} delivery=${deliveryId ?? '-'} status=${webhookEvent.status}`,
-    );
-
-    return {
-      received: true,
-      event,
-      action,
-      deliveryId,
-      processedAt: webhookEvent.processedAt.toISOString(),
-      result,
-    };
-  }
-
-  private async processEvent(
-    event: string,
-    action: string | null,
-    body: any,
-    installationId: string | null,
-  ): Promise<Record<string, unknown>> {
-    switch (event) {
-      case 'ping':
-        return {
-          message: 'GitHub webhook handshake received.',
-          hookId: body?.hook_id ?? null,
-        };
-
-      case 'installation':
-        return this.handleInstallationEvent(action, body);
-
-      case 'installation_repositories':
-        return this.handleInstallationRepositoriesEvent(action, body, installationId);
-
-      case 'repository':
-        return this.handleRepositoryEvent(action, body);
-
-      case 'push':
-        return this.handlePushEvent(body);
-
-      case 'pull_request':
-        return this.handlePullRequestEvent(action, body, installationId);
-
-      default:
-        return {
-          message: 'Webhook received but no automation handler is wired for this event yet.',
-          repository: body?.repository?.full_name ?? null,
-        };
-    }
-  }
-
-  private async handleInstallationEvent(action: string | null, body: any): Promise<Record<string, unknown>> {
-    const installationId = body?.installation?.id ? String(body.installation.id) : null;
-    if (!installationId) {
-      return { message: 'Installation event missing installation id, ignored.' };
-    }
-
-    if (action === 'deleted') {
-      await this.installationRepo.delete({ installationId });
-      return { message: 'GitHub App installation removed.', installationId };
-    }
-
-    if (action === 'suspend') {
-      await this.installationRepo.update({ installationId }, { suspendedAt: new Date() });
-      return { message: 'GitHub App installation suspended.', installationId };
-    }
-
-    if (action === 'unsuspend') {
-      await this.installationRepo.update({ installationId }, { suspendedAt: null });
-      return { message: 'GitHub App installation unsuspended.', installationId };
-    }
-
-    await this.installationRepo.update(
-      { installationId },
-      {
-        accountLogin: body?.installation?.account?.login ?? null,
-        accountType: body?.installation?.account?.type ?? null,
-        repositorySelection: body?.installation?.repository_selection ?? null,
-      },
-    );
-
-    return { message: `Installation '${action ?? 'updated'}' event processed.`, installationId };
-  }
-
-  private async handleInstallationRepositoriesEvent(
-    action: string | null,
-    body: any,
-    installationId: string | null,
-  ): Promise<Record<string, unknown>> {
-    if (!installationId) {
-      return { message: 'installation_repositories event missing installation id, ignored.' };
-    }
-
-    const added: any[] = body?.repositories_added ?? [];
-    const removed: any[] = body?.repositories_removed ?? [];
-
-    for (const repo of added) {
-      await this.repoRepo.update({ fullName: repo.full_name }, { installationId });
-    }
-    for (const repo of removed) {
-      await this.repoRepo.update({ fullName: repo.full_name, installationId }, { installationId: null });
-    }
-
-    return {
-      message: `installation_repositories '${action ?? 'updated'}' processed.`,
-      installationId,
-      added: added.map((r) => r.full_name),
-      removed: removed.map((r) => r.full_name),
-    };
-  }
-
-  private async handleRepositoryEvent(action: string | null, body: any): Promise<Record<string, unknown>> {
-    const fullName = body?.repository?.full_name ?? null;
-    if (!fullName) {
-      return { message: 'repository event missing repository info, ignored.' };
-    }
-
-    if (action === 'deleted') {
-      return { message: 'Repository deleted on GitHub. Local record retained for history.', repository: fullName };
-    }
-
-    if (action === 'renamed' || action === 'transferred') {
-      const previousName = body?.changes?.repository?.name?.from ?? body?.changes?.full_name?.from ?? null;
-      if (previousName) {
-        const previousFullName = fullName.includes('/')
-          ? `${fullName.split('/')[0]}/${previousName}`
-          : previousName;
-        await this.repoRepo.update({ fullName: previousFullName }, { fullName, name: body.repository?.name ?? previousName });
-      }
-      return { message: `Repository '${action}' event processed.`, repository: fullName };
-    }
-
-    return { message: `Repository '${action ?? 'updated'}' event recorded (no action needed).`, repository: fullName };
-  }
-
-  private async handlePushEvent(body: any): Promise<Record<string, unknown>> {
-    const fullName = body?.repository?.full_name ?? null;
-    const after = body?.after ?? null;
-    const ref = body?.ref ?? null;
-
-    if (!fullName || !after || /^0+$/.test(after)) {
-      return { message: 'Push event ignored (branch deleted or missing commit info).', repository: fullName, ref };
-    }
-
-    const repo = await this.repoRepo.findOne({ where: { fullName } });
-    if (!repo) {
-      return {
-        message: 'Push event accepted, but repository is not tracked in TockTest yet.',
-        repository: fullName,
-        ref,
-      };
-    }
-
-    const headCommit = body?.head_commit ?? null;
-    await this.commitAnalysisRepo.upsert(
-      {
-        repoId: repo.id,
-        commitSha: after,
-        commitMessage: headCommit?.message ?? null,
-        authorName: headCommit?.author?.name ?? null,
-        authorEmail: headCommit?.author?.email ?? null,
-        committedAt: headCommit?.timestamp ? new Date(headCommit.timestamp) : null,
-        rawData: { source: 'webhook', ref, pusher: body?.pusher ?? null },
-      },
-      { conflictPaths: ['repoId', 'commitSha'] },
-    );
-
-    const installationId = body?.installation?.id ? String(body.installation.id) : null;
-    if (installationId && !repo.installationId) {
-      await this.repoRepo.update({ id: repo.id }, { installationId });
-    }
-
-    await this.jobsService.enqueue(
-      'analyze_commit',
-      { repoId: repo.id, commitSha: after, installationId },
-      `analyze:${repo.id}:${after}`,
-    );
-
-    return {
-      message: 'Push event queued for background commit analysis.',
-      repository: fullName,
-      ref,
-      commitSha: after,
-      queued: true,
-    };
-  }
-
-  private async handlePullRequestEvent(
-    action: string | null,
-    body: any,
-    installationId: string | null,
-  ): Promise<Record<string, unknown>> {
-    const fullName = body?.repository?.full_name ?? null;
-    const prNumber = body?.number ?? null;
-    const headSha = body?.pull_request?.head?.sha ?? null;
-    const baseBranch = body?.pull_request?.base?.ref ?? null;
-
-    const trackedActions = ['opened', 'reopened', 'synchronize'];
-    let queued = false;
-
-    if (installationId && fullName && prNumber && headSha && trackedActions.includes(action ?? '')) {
-      await this.jobsService.enqueue(
-        'pr_review',
-        { installationId, repoFullName: fullName, prNumber, headSha },
-        `pr:${fullName}:${prNumber}:${headSha}`,
-      );
-      queued = true;
-    }
-
-    return {
-      message: queued
-        ? 'Pull request queued for background AI review and GitHub writeback.'
-        : 'Pull request event recorded (no automation for this action).',
-      repository: fullName,
-      pullRequestNumber: prNumber,
-      headSha,
-      baseBranch,
-      queued,
-    };
-  }
-
   // --- GitHub App auth & writeback ---------------------------------------
 
   private generateAppJwt(): string {
@@ -479,69 +190,6 @@ export class GithubAppService {
     return res.data.token;
   }
 
-  async getWebhookEvents(userId: string, limit = 50, status?: string) {
-    const [installations, repositories] = await Promise.all([
-      this.installationRepo.find({ where: { userId } }),
-      this.repoRepo.find({ where: { userId } }),
-    ]);
-    const installationIds = installations.map((item) => item.installationId);
-    const repoNames = repositories.map((item) => item.fullName);
-    if (installationIds.length === 0 && repoNames.length === 0) {
-      return [];
-    }
-
-    const qb = this.webhookEventRepo
-      .createQueryBuilder('e')
-      .orderBy('e.createdAt', 'DESC')
-      .take(Math.min(Number(limit) || 50, 200));
-    if (status) qb.where('e.status = :status', { status });
-    if (installationIds.length > 0 && repoNames.length > 0) {
-      qb.andWhere('(e.installationId IN (:...installationIds) OR e.repoFullName IN (:...repoNames))', {
-        installationIds,
-        repoNames,
-      });
-    } else if (installationIds.length > 0) {
-      qb.andWhere('e.installationId IN (:...installationIds)', { installationIds });
-    } else {
-      qb.andWhere('e.repoFullName IN (:...repoNames)', { repoNames });
-    }
-    const events = await qb.getMany();
-    return events.map((e) => ({
-      id: e.id,
-      event: e.event,
-      action: e.action,
-      repoFullName: e.repoFullName,
-      deliveryId: e.deliveryId,
-      status: e.status,
-      errorMessage: e.errorMessage,
-      processedAt: e.processedAt,
-      createdAt: e.createdAt,
-    }));
-  }
-
-  async replayWebhookEvent(userId: string, eventId: string) {
-    const event = await this.webhookEventRepo.findOne({ where: { id: eventId } });
-    if (!event) throw new BadRequestException('Webhook event not found');
-    await this.assertUserCanAccessEvent(userId, event);
-
-    event.status = 'replaying';
-    await this.webhookEventRepo.save(event);
-
-    try {
-      const result = await this.processEvent(event.event, event.action, event.payload, event.installationId ? String(event.installationId) : null);
-      event.status = 'processed';
-      event.processedAt = new Date();
-      event.errorMessage = null;
-      await this.webhookEventRepo.save(event);
-      return { replayed: true, result };
-    } catch (err: any) {
-      event.status = 'failed';
-      event.errorMessage = String(err?.message ?? err).slice(0, 2000);
-      await this.webhookEventRepo.save(event);
-      throw err;
-    }
-  }
-
   async postIssueComment(installationId: string, repoFullName: string, issueNumber: number, body: string) {
     const token = await this.getInstallationToken(installationId);
     await axios.post(
@@ -565,43 +213,5 @@ export class GithubAppService {
       { state, description, context },
       { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } },
     );
-  }
-
-  private async assertUserCanAccessEvent(userId: string, event: WebhookEvent) {
-    if (event.installationId) {
-      const installation = await this.installationRepo.findOne({
-        where: { userId, installationId: String(event.installationId) },
-      });
-      if (installation) return;
-    }
-
-    if (event.repoFullName) {
-      const repository = await this.repoRepo.findOne({
-        where: { userId, fullName: event.repoFullName },
-      });
-      if (repository) return;
-    }
-
-    throw new ForbiddenException('You do not have access to this webhook event');
-  }
-
-  private verifySignature(rawBody: Buffer | string | undefined, signature256?: string) {
-    const secret = this.config.get<string>('GITHUB_WEBHOOK_SECRET');
-    if (!secret) return;
-    if (!rawBody || !signature256) {
-      throw new UnauthorizedException('Missing GitHub webhook signature');
-    }
-
-    const payloadBuffer = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody);
-    const expected = `sha256=${createHmac('sha256', secret).update(payloadBuffer).digest('hex')}`;
-    const expectedBuffer = Buffer.from(expected);
-    const providedBuffer = Buffer.from(signature256);
-
-    if (
-      expectedBuffer.length !== providedBuffer.length ||
-      !timingSafeEqual(expectedBuffer, providedBuffer)
-    ) {
-      throw new UnauthorizedException('Invalid GitHub webhook signature');
-    }
   }
 }

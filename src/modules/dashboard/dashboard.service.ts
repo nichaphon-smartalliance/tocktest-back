@@ -139,7 +139,6 @@ export class DashboardService {
     const githubAppConfigured =
       !!this.config.get<string>('GITHUB_APP_ID') &&
       !!this.config.get<string>('GITHUB_APP_PRIVATE_KEY');
-    const webhookConfigured = !!this.config.get<string>('GITHUB_WEBHOOK_SECRET');
     const installUrlConfigured =
       !!this.config.get<string>('GITHUB_APP_INSTALL_URL') || !!this.config.get<string>('GITHUB_APP_NAME');
 
@@ -187,33 +186,18 @@ export class DashboardService {
           : 'GitHub App permissions, installation flow, PR status checks, and review-comment writeback are still missing.',
       },
       {
-        key: 'webhook_automation',
-        label: 'Webhook-triggered QA automation',
-        status: webhookConfigured ? 'live' : 'missing',
-        description: webhookConfigured
-          ? 'Push and pull_request webhooks enqueue background jobs for commit analysis and PR review.'
-          : 'There is no webhook listener configuration yet for push, pull_request, or merge events.',
-      },
-      {
         key: 'pr_reviewer',
         label: 'Pull request review bot',
-        status: githubAppConfigured && webhookConfigured ? 'live' : githubAppConfigured ? 'partial' : 'missing',
-        description:
-          githubAppConfigured && webhookConfigured
-            ? 'PR events post AI review comments and commit status checks back to GitHub via the background job runner.'
-            : 'Install the GitHub App and configure webhooks to enable automated PR review writeback.',
+        status: githubAppConfigured ? 'partial' : 'missing',
+        description: githubAppConfigured
+          ? 'GitHub App is configured. PR review writeback can be triggered via the background job runner.'
+          : 'Install the GitHub App to enable automated PR review writeback.',
       },
       {
         key: 'qa_chat',
         label: 'Interactive QA chat',
         status: 'live',
         description: 'Repository-aware QA chat is live. Ask test and code questions in the QA Chat tab.',
-      },
-      {
-        key: 'sandbox_execution',
-        label: 'Sandboxed test execution',
-        status: 'live',
-        description: 'Cypress test execution runs in isolated Docker containers via the Sandbox tab. Docker must be available on the server.',
       },
     ] as const;
   }

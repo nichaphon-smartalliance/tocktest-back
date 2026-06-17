@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Req, Res } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { User } from '../users/entities/user.entity';
@@ -58,38 +58,5 @@ export class GithubAppController {
     } catch {
       return res.redirect(`${frontendUrl}/settings?github_app=error`);
     }
-  }
-
-  @Get('webhook-events')
-  getWebhookEvents(
-    @CurrentUser() user: User,
-    @Query('limit') limit?: number,
-    @Query('status') status?: string,
-  ) {
-    return this.githubAppService.getWebhookEvents(user.id, limit, status);
-  }
-
-  @Post('webhook-events/:eventId/replay')
-  replayWebhookEvent(
-    @CurrentUser() user: User,
-    @Param('eventId') eventId: string,
-  ) {
-    return this.githubAppService.replayWebhookEvent(user.id, eventId);
-  }
-
-  @Public()
-  @Post('webhooks/github')
-  receiveGithubWebhook(
-    @Headers('x-github-event') event: string | undefined,
-    @Headers('x-github-delivery') deliveryId: string | undefined,
-    @Headers('x-hub-signature-256') signature256: string | undefined,
-    @Req() req: Request & { rawBody?: Buffer },
-    @Body() body: any,
-  ) {
-    return this.githubAppService.handleWebhook(
-      { event, deliveryId, signature256 },
-      req.rawBody,
-      body,
-    );
   }
 }
