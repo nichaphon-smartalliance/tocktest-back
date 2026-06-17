@@ -34,19 +34,19 @@ export class DocsController {
 
   @Post(':repoId/docs/gen')
   generate(@CurrentUser() user: User, @Param('repoId') repoId: string) {
-    if (!user || !user.id) throw new UnauthorizedException('à¸à¸£à¸¸à¸“à¸²à¹€à¸‚à¹‰à¸²à¸ªà¸¹à¹ˆà¸£à¸°à¸šà¸šà¸à¹ˆà¸­à¸™');
+    if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
     return this.service.generate(user.id, repoId);
   }
 
   @Post(':repoId/docs/refresh')
   refresh(@CurrentUser() user: User, @Param('repoId') repoId: string) {
-    if (!user || !user.id) throw new UnauthorizedException('à¸à¸£à¸¸à¸“à¸²à¹€à¸‚à¹‰à¸²à¸ªà¸¹à¹ˆà¸£à¸°à¸šà¸šà¸à¹ˆà¸­à¸™');
+    if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
     return this.service.refresh(user.id, repoId);
   }
 
   @Post(':repoId/docs/auto-update')
   autoUpdate(@CurrentUser() user: User, @Param('repoId') repoId: string) {
-    if (!user || !user.id) throw new UnauthorizedException('à¸à¸£à¸¸à¸“à¸²à¹€à¸‚à¹‰à¸²à¸ªà¸¹à¹ˆà¸£à¸°à¸šà¸šà¸à¹ˆà¸­à¸™');
+    if (!user || !user.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
     return this.service.autoUpdate(user.id, repoId);
   }
 
