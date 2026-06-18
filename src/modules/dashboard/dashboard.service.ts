@@ -26,7 +26,6 @@ export class DashboardService {
       this.repoRepo.find({
         where: { userId },
         order: { updatedAt: 'DESC' },
-        take: 8,
       }),
       this.githubTokensService.hasActiveToken(userId),
     ]);
@@ -53,8 +52,6 @@ export class DashboardService {
       };
     }
 
-    const recentRepoIds = recentRepos.map((r) => r.id);
-
     const [statusRows, aiGeneratedCount, failHighPriority, perRepoRows] = await Promise.all([
       this.tcRepo
         .createQueryBuilder('tc')
@@ -74,11 +71,13 @@ export class DashboardService {
         .createQueryBuilder('tc')
         .select('tc.repo_id', 'repoId')
         .addSelect('COUNT(*)', 'total')
-        .addSelect("SUM(CASE WHEN tc.status = 'fail' THEN 1 ELSE 0 END)", 'failCount')
         .addSelect("SUM(CASE WHEN tc.status = 'pass' THEN 1 ELSE 0 END)", 'passCount')
-        .where('tc.repo_id IN (:...repoIds)', { repoIds: recentRepoIds })
+        .addSelect("SUM(CASE WHEN tc.status = 'fail' THEN 1 ELSE 0 END)", 'failCount')
+        .addSelect("SUM(CASE WHEN tc.status = 'blocked' THEN 1 ELSE 0 END)", 'blockedCount')
+        .addSelect("SUM(CASE WHEN tc.status = 'not_tested' THEN 1 ELSE 0 END)", 'notTestedCount')
+        .where('tc.repo_id IN (:...repoIds)', { repoIds: allRepoIds })
         .groupBy('tc.repo_id')
-        .getRawMany<{ repoId: string; total: string; failCount: string; passCount: string }>(),
+        .getRawMany<{ repoId: string; total: string; passCount: string; failCount: string; blockedCount: string; notTestedCount: string }>(),
     ]);
 
     const byStatus = { ...emptyStatus };
@@ -94,7 +93,13 @@ export class DashboardService {
     const perRepoMap = new Map(
       perRepoRows.map((r) => [
         r.repoId,
-        { total: Number(r.total), failCount: Number(r.failCount), passCount: Number(r.passCount) },
+        {
+          total: Number(r.total),
+          passCount: Number(r.passCount),
+          failCount: Number(r.failCount),
+          blockedCount: Number(r.blockedCount),
+          notTestedCount: Number(r.notTestedCount),
+        },
       ]),
     );
 
@@ -117,14 +122,19 @@ export class DashboardService {
       hasGithubToken,
       capabilities,
       nextMilestones: this.buildNextMilestones(capabilities),
-      recentRepos: recentRepos.map((r) => ({
-        id: r.id,
-        fullName: r.fullName,
-        testCaseCount: perRepoMap.get(r.id)?.total ?? 0,
-        failCount: perRepoMap.get(r.id)?.failCount ?? 0,
-        passCount: perRepoMap.get(r.id)?.passCount ?? 0,
-        lastSyncedAt: r.lastSyncedAt,
-      })),
+      recentRepos: recentRepos.map((r) => {
+        const stats = perRepoMap.get(r.id);
+        return {
+          id: r.id,
+          fullName: r.fullName,
+          testCaseCount: stats?.total ?? 0,
+          passCount: stats?.passCount ?? 0,
+          failCount: stats?.failCount ?? 0,
+          blockedCount: stats?.blockedCount ?? 0,
+          notTestedCount: stats?.notTestedCount ?? 0,
+          lastSyncedAt: r.lastSyncedAt,
+        };
+      }),
     };
   }
 
