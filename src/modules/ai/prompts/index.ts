@@ -1,7 +1,10 @@
-export function buildTestGenerationPrompt(diffs: string): string {
+export function buildTestGenerationPrompt(diffs: string, projectContext?: string): string {
+  const contextSection = projectContext
+    ? `PROJECT CONTEXT (CLAUDE.md / README):\n${projectContext}\n\n`
+    : '';
   return `คุณคือ QA Engineer ผู้เชี่ยวชาญ วิเคราะห์ code changes เหล่านี้และสร้าง test cases ที่ครอบคลุม
 
-CODE CHANGES:
+${contextSection}CODE CHANGES:
 ${diffs}
 
 สร้าง test cases ในรูปแบบ JSON array เท่านั้น ห้ามมีข้อความอื่น:

@@ -172,6 +172,7 @@ export class AiService {
     if (!diffs) {
       throw new InternalServerErrorException('ไม่พบ commit ที่สามารถวิเคราะห์ได้ในช่วงเวลาที่เลือก');
     }
+    const projectContext = await this.fetchProjectContext(repo.fullName, pat);
     const mapTestCases = (parsed: any[]) =>
       parsed.map((tc) => ({
         title: tc.title ?? '',
@@ -192,7 +193,7 @@ export class AiService {
       return { testCases, logId: null, model: 'heuristic', tokensUsed: 0 };
     }
 
-    const prompt = buildTestGenerationPrompt(diffs);
+    const prompt = buildTestGenerationPrompt(diffs, projectContext || undefined);
     const response = await this.chat([{ role: 'user', content: prompt }], { repoId });
     const parsed = this.parseJson<any[]>(response) ?? [];
     if (parsed.length === 0) {
@@ -205,6 +206,24 @@ export class AiService {
       model: 'default',
       tokensUsed: 0,
     };
+  }
+
+  async fetchProjectContext(fullName: string, pat: string): Promise<string> {
+    const files = ['CLAUDE.md', 'README.md'];
+    const parts: string[] = [];
+    for (const file of files) {
+      try {
+        const res = await axios.get(
+          `https://api.github.com/repos/${fullName}/contents/${file}`,
+          { headers: { Authorization: `token ${pat}` }, timeout: 5000 },
+        );
+        const content = Buffer.from(res.data.content, 'base64').toString('utf-8');
+        parts.push(`--- ${file} ---\n${content.slice(0, 3000)}`);
+      } catch {
+        // file not found or inaccessible — skip silently
+      }
+    }
+    return parts.join('\n\n');
   }
 
   // ── Commit Analysis ───────────────────────────────────────────────────
