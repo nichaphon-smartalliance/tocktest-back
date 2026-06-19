@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository as TypeOrmRepo, ILike } from 'typeorm';
+import { Repository as TypeOrmRepo, ILike, Not, In } from 'typeorm';
 import axios from 'axios';
 import { Repository } from './entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
@@ -46,6 +46,17 @@ export class RepositoriesService {
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token กรุณาเพิ่มก่อน');
 
     const githubRepos = await this.fetchGithubRepos(pat);
+
+    const liveIds = githubRepos.map((gr) => gr.id);
+    if (liveIds.length > 0) {
+      await this.repoRepository.delete({
+        userId,
+        githubRepoId: Not(In(liveIds)),
+      });
+    } else {
+      await this.repoRepository.delete({ userId });
+    }
+
     let synced = 0;
 
     for (const gr of githubRepos) {
