@@ -39,7 +39,7 @@ export class AiService {
     @InjectRepository(RepoSettings)
     private readonly repoSettingsRepo: TypeOrmRepo<RepoSettings>,
     private readonly githubTokensService: GithubTokensService,
-  ) {}
+  ) { }
 
   private get apiUrl(): string {
     return this.config.get<string>('AI_API_URL', 'http://localhost:3009');
@@ -90,32 +90,23 @@ export class AiService {
   }
 
   async chat(messages: ChatMessage[], options?: AiExecutionOptions): Promise<string> {
-    if (await this.shouldUseOfflineMode(options)) {
-      this.logger.warn('AI offline mode enabled for repository - using heuristic chat');
-      return heuristicChat(messages);
-    }
-    if (this.openaiApiKey) {
-      return this.openaiChat(messages);
-    }
-    if (await this.isRemoteAiAvailable()) {
-      try {
-        const res = await axios.post(
-          `${this.apiUrl}/chat`,
-          { messages, max_tokens: 4096 },
-          { timeout: 60000 },
-        );
-        const content =
-          res.data?.choices?.[0]?.message?.content ??
-          res.data?.data?.content ??
-          res.data?.content ??
-          res.data?.response ??
-          res.data?.message ??
-          '';
-        this.logger.debug(`AI response length: ${content.length} chars`);
-        return content;
-      } catch (err: any) {
-        this.logger.error(`AI API call failed: ${err.message}`);
-      }
+    try {
+      const res = await axios.post(
+        `${this.apiUrl}/chat`,
+        { messages, max_tokens: 4096 },
+        { timeout: 60000 },
+      );
+      const content =
+        res.data?.choices?.[0]?.message?.content ??
+        res.data?.data?.content ??
+        res.data?.content ??
+        res.data?.response ??
+        res.data?.message ??
+        '';
+      this.logger.debug(`AI response length: ${content.length} chars`);
+      return content;
+    } catch (err: any) {
+      this.logger.error(`AI API call failed: ${err.message}`);
     }
     // Heuristic fallback — uses real repo data from context, no external AI needed
     this.logger.warn('AI offline — using heuristic chat');
@@ -186,12 +177,6 @@ export class AiService {
         isAiGenerated: true,
         folderId: null,
       }));
-
-    if (await this.shouldUseOfflineMode({ repoId }) || !(await this.isRemoteAiAvailable())) {
-      this.logger.warn('AI offline — using heuristic test case generation');
-      const testCases = heuristicGenerateTestCases(diffs);
-      return { testCases, logId: null, model: 'heuristic', tokensUsed: 0 };
-    }
 
     const prompt = buildTestGenerationPrompt(diffs, projectContext || undefined);
     const response = await this.chat([{ role: 'user', content: prompt }], { repoId });
@@ -320,12 +305,12 @@ export class AiService {
       riskLevel: normalizeRiskLevel(result.riskLevel),
       findings: Array.isArray(result.findings)
         ? result.findings.map((item) => ({
-            file: item.file ?? null,
-            severity: normalizeRiskLevel(item.severity),
-            title: item.title ?? 'Review finding',
-            comment: item.comment ?? '',
-            suggestion: item.suggestion ?? '',
-          }))
+          file: item.file ?? null,
+          severity: normalizeRiskLevel(item.severity),
+          title: item.title ?? 'Review finding',
+          comment: item.comment ?? '',
+          suggestion: item.suggestion ?? '',
+        }))
         : [],
       mergeRecommendation:
         result.mergeRecommendation === 'approve' || result.mergeRecommendation === 'request_changes'
