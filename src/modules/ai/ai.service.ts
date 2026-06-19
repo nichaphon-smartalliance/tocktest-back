@@ -162,6 +162,7 @@ export class AiService {
     fromDate?: string;
     toDate?: string;
     commitShas?: string[];
+    branch?: string;
   }) {
     const repo = await this.repoRepo.findOne({ where: { id: repoId, userId } });
     if (!repo) throw new NotFoundException('Repository not found');
@@ -321,13 +322,20 @@ export class AiService {
     fromDate?: string;
     toDate?: string;
     commitShas?: string[];
+    branch?: string;
   }): Promise<string | null> {
     try {
       let shas = params.commitShas ?? [];
       if (!shas.length) {
+        const query: Record<string, unknown> = {
+          since: params.fromDate,
+          until: params.toDate,
+          per_page: 10,
+        };
+        if (params.branch) query.sha = params.branch;
         const res = await axios.get(`https://api.github.com/repos/${fullName}/commits`, {
           headers: { Authorization: `token ${pat}` },
-          params: { since: params.fromDate, until: params.toDate, per_page: 10 },
+          params: query,
           timeout: 10000,
         });
         shas = res.data.map((c: any) => c.sha);

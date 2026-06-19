@@ -19,6 +19,7 @@ export class AiController {
       fromDate: dto.fromDate,
       toDate: dto.toDate,
       commitShas: dto.commitShas,
+      branch: dto.branch,
     });
   }
 }

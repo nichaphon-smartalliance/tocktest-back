@@ -16,4 +16,8 @@ export class GenerateTestCasesDto {
   @IsArray()
   @IsString({ each: true })
   commitShas?: string[];
+
+  @IsOptional()
+  @IsString()
+  branch?: string;
 }
