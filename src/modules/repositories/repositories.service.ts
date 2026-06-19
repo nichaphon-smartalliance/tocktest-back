@@ -96,7 +96,7 @@ export class RepositoriesService {
     while (true) {
       const res = await axios.get('https://api.github.com/user/repos', {
         headers: { Authorization: `token ${pat}` },
-        params: { per_page: 100, page, sort: 'updated' },
+        params: { per_page: 100, page, sort: 'updated', type: 'owner' },
       });
       repos.push(...res.data);
       if (res.data.length < 100) break;
