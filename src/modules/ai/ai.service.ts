@@ -90,6 +90,8 @@ export class AiService {
   }
 
   async chat(messages: ChatMessage[], options?: AiExecutionOptions): Promise<string> {
+    messages[0].content += " ตอบกลับเป็น ภาษาไทย";
+    console.log("AI chat messages:", messages); 
     try {
       const res = await axios.post(
         `${this.apiUrl}/chat`,
