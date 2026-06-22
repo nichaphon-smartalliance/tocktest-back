@@ -42,6 +42,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 4004;
   await app.listen(port);
+  console.log(`🚀 TockTest Backend running on http://localhost:${port}`);
 }
 
 async function ensureGithubTokenExpiresAt(dataSource: DataSource) {
