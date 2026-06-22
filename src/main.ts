@@ -42,9 +42,6 @@ async function bootstrap() {
 
   const port = process.env.PORT || 4004;
   await app.listen(port);
-  console.log(`🚀 TockTest Backend running on ${url}`);
-  console.log(`🚀 TockTest Backend db on '${process.env.DB_HOST}:${process.env.DB_PORT}:'${process.env.DB_NAME}'`);
-  console.log(`🚀 TockTest Backend password on '${process.env.DB_PASSWORD}'`);
 }
 
 async function ensureGithubTokenExpiresAt(dataSource: DataSource) {
@@ -61,8 +58,8 @@ async function ensureGithubTokenExpiresAt(dataSource: DataSource) {
       console.log('Adding missing expires_at column to github_tokens table');
       await dataSource.query('ALTER TABLE github_tokens ADD COLUMN expires_at timestamptz');
     }
-  } catch (error) {
-    console.warn('Could not verify github_tokens schema:', error?.message ?? error);
+  } catch (error : {message?: string} | any) {
+    console.warn('Could not verify github_tokens schema:', error.message ?? error);
   }
 }
 
@@ -90,8 +87,8 @@ async function ensureGithubOAuthAppSchema(dataSource: DataSource) {
     await dataSource.query(
       'CREATE INDEX IF NOT EXISTS idx_github_installations_user_id ON github_installations(user_id)',
     );
-  } catch (error) {
-    console.warn('Could not verify GitHub OAuth/App schema:', error?.message ?? error);
+  } catch (error : {message?: string} | any) {
+    console.warn('Could not verify GitHub OAuth/App schema:', error.message ?? error);
   }
 }
 
@@ -115,8 +112,8 @@ async function ensureBackgroundJobsTable(dataSource: DataSource) {
       );
       CREATE INDEX IF NOT EXISTS idx_background_jobs_status_scheduled ON background_jobs (status, scheduled_at);
     `);
-  } catch (error) {
-    console.warn('Could not ensure background_jobs table:', (error as Error)?.message ?? error);
+  } catch (error : {message?: string} | any) {
+    console.warn('Could not ensure background_jobs table:', error.message ?? error);
   }
 }
 
@@ -130,8 +127,8 @@ async function ensureGithubLoginSchema(dataSource: DataSource) {
     await dataSource.query(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id) WHERE github_id IS NOT NULL',
     );
-  } catch (error) {
-    console.warn('Could not ensure GitHub login schema:', (error as Error)?.message ?? error);
+  } catch (error : {message?: string} | any) {
+    console.warn('Could not ensure GitHub login schema:', error.message ?? error);
   }
 }
 
@@ -141,8 +138,8 @@ async function ensureRepositoryInstallationSchema(dataSource: DataSource) {
     await dataSource.query(
       'CREATE INDEX IF NOT EXISTS idx_repositories_installation_id ON repositories(installation_id)',
     );
-  } catch (error) {
-    console.warn('Could not ensure repository installation schema:', (error as Error)?.message ?? error);
+  } catch (error : {message?: string} | any) {
+    console.warn('Could not ensure repository installation schema:', error.message ?? error);
   }
 }
 
