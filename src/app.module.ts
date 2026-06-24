@@ -27,7 +27,7 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
         type: 'postgres',
         host: process.env.DB_HOST || 'localhost',
         port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
-        username: process.env.DB_USERNAME || 'postgressss',
+        username: process.env.DB_USERNAME || 'postgres',
         password: process.env.DB_PASSWORD || 'smart2026#',
         database: process.env.DB_NAME || 'tocktest_db',
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
