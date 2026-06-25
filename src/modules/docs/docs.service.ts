@@ -1,11 +1,12 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository as TypeOrmRepo } from 'typeorm';
+import { Repository as TypeOrmRepo, In } from 'typeorm';
 import axios from 'axios';
 import { ProjectDoc } from './entities/project-doc.entity';
 import { RepositoriesService } from '../repositories/repositories.service';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
 import { RepoSettings } from '../settings/entities/repo-settings.entity';
+import { UsersService } from '../users/users.service';
 
 type DocSyncStatus = 'idle' | 'queued' | 'running' | 'success' | 'error';
 
@@ -35,6 +36,10 @@ export interface DocStatusResponse {
   isStale: boolean;
 }
 
+export type DocHistoryEntry =
+  | { kind: 'version'; id: string; version: number; updatedAt: Date; updatedBy: string | null }
+  | { kind: 'deleted'; id: string; email: string; deletedAt: Date };
+
 @Injectable()
 export class DocsService {
   private readonly logger = new Logger(DocsService.name);
@@ -46,37 +51,73 @@ export class DocsService {
     private readonly settingsRepo: TypeOrmRepo<RepoSettings>,
     private readonly repoService: RepositoriesService,
     private readonly githubTokensService: GithubTokensService,
+    private readonly usersService: UsersService,
   ) {}
 
   async getLatestDoc(userId: string, repoId: string): Promise<ProjectDoc | null> {
-    await this.repoService.findOneForUser(userId, repoId);
+    const sharedIds = await this.repoService.getSharedRepoIds(userId, repoId);
     return this.docRepo.findOne({
-      where: { repoId },
+      where: sharedIds.map((id) => ({ repoId: id })),
       order: { version: 'DESC' },
     });
   }
 
   async updateDoc(userId: string, repoId: string, content: string, latestVersion?: number): Promise<ProjectDoc> {
     await this.repoService.findOneForUser(userId, repoId);
-    const newVersion = (latestVersion ?? (await this.getLatestDocVersion(repoId))) + 1;
+    const sharedIds = await this.repoService.getSharedRepoIds(userId, repoId);
 
-    const doc = this.docRepo.create({
-      repoId,
-      content,
-      version: newVersion,
-      updatedBy: userId,
-    });
-    return this.docRepo.save(doc);
+    let newVersion: number;
+    if (latestVersion !== undefined) {
+      newVersion = latestVersion + 1;
+    } else {
+      const latest = await this.docRepo.findOne({
+        where: sharedIds.map((id) => ({ repoId: id })),
+        select: ['version'],
+        order: { version: 'DESC' },
+      });
+      newVersion = (latest?.version ?? 0) + 1;
+    }
+
+    const doc = this.docRepo.create({ repoId, content, version: newVersion, updatedBy: userId });
+    const saved = await this.docRepo.save(doc);
+
+    for (const id of sharedIds) {
+      await this.settingsRepo.update({ repoId: id }, { docsDeletedByEmail: null, docsDeletedAt: null } as any);
+    }
+
+    return saved;
   }
 
-  async getVersions(userId: string, repoId: string) {
-    await this.repoService.findOneForUser(userId, repoId);
-    return this.docRepo.find({
-      where: { repoId },
+  async getVersions(userId: string, repoId: string): Promise<DocHistoryEntry[]> {
+    const sharedIds = await this.repoService.getSharedRepoIds(userId, repoId);
+
+    const versions = await this.docRepo.find({
+      where: sharedIds.map((id) => ({ repoId: id })),
       select: ['id', 'version', 'updatedAt', 'updatedBy'],
       order: { version: 'DESC' },
       take: 20,
     });
+
+    const settings = await this.settingsRepo.findOne({ where: { repoId } });
+
+    const entries: DocHistoryEntry[] = versions.map((v) => ({
+      kind: 'version' as const,
+      id: v.id,
+      version: v.version,
+      updatedAt: v.updatedAt,
+      updatedBy: v.updatedBy,
+    }));
+
+    if (settings?.docsDeletedByEmail && settings.docsDeletedAt) {
+      entries.unshift({
+        kind: 'deleted' as const,
+        id: `del-${settings.docsDeletedAt.getTime()}`,
+        email: settings.docsDeletedByEmail,
+        deletedAt: settings.docsDeletedAt,
+      });
+    }
+
+    return entries;
   }
 
   async deleteDoc(userId: string, repoId: string): Promise<void> {
@@ -188,6 +229,7 @@ export class DocsService {
         await this.markStatus(repoId, 'success', 'Docs are already up to date.', {
           docsLastGeneratedAt: settings.docsLastGeneratedAt ?? new Date(),
         });
+        await this.clearDeletionInfoAcrossSharedRepos(userId, repoId);
         return;
       }
 
@@ -247,6 +289,7 @@ export class DocsService {
           docsSourceCache: nextCache,
         },
       );
+      await this.clearDeletionInfoAcrossSharedRepos(userId, repoId);
     } catch (error: any) {
       await this.markStatus(repoId, 'error', this.describeGenerationError(error));
       throw error;
@@ -260,6 +303,13 @@ export class DocsService {
       order: { version: 'DESC' },
     });
     return latest?.version ?? 0;
+  }
+
+  private async clearDeletionInfoAcrossSharedRepos(userId: string, repoId: string): Promise<void> {
+    const sharedIds = await this.repoService.getSharedRepoIds(userId, repoId);
+    for (const id of sharedIds) {
+      await this.settingsRepo.update({ repoId: id }, { docsDeletedByEmail: null, docsDeletedAt: null } as any);
+    }
   }
 
   private async getOrCreateSettings(repoId: string, defaultBranch: string): Promise<RepoSettings> {
