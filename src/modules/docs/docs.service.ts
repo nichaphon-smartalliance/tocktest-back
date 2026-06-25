@@ -121,16 +121,25 @@ export class DocsService {
   }
 
   async deleteDoc(userId: string, repoId: string): Promise<void> {
-    await this.repoService.findOneForUser(userId, repoId);
-    await this.docRepo.delete({ repoId });
-    await this.updateSettings(repoId, {
-      docsSyncStatus: 'idle',
-      docsSyncMessage: null,
-      docsLastGeneratedAt: null,
-      docsLastCommitSha: null,
-      docsLastSourceSha: null,
-      docsSourceCache: null,
-    });
+    const sharedIds = await this.repoService.getSharedRepoIds(userId, repoId);
+    const user = await this.usersService.findById(userId);
+    const email = user?.email ?? userId;
+    const now = new Date();
+
+    await this.docRepo.delete({ repoId: In(sharedIds) });
+
+    for (const id of sharedIds) {
+      await this.updateSettings(id, {
+        docsSyncStatus: 'idle',
+        docsSyncMessage: null,
+        docsLastGeneratedAt: null,
+        docsLastCommitSha: null,
+        docsLastSourceSha: null,
+        docsSourceCache: null,
+        docsDeletedByEmail: email,
+        docsDeletedAt: now,
+      });
+    }
   }
 
   async getStatus(userId: string, repoId: string): Promise<DocStatusResponse> {
