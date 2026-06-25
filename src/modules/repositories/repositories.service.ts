@@ -41,6 +41,20 @@ export class RepositoriesService {
     return repo;
   }
 
+  /**
+   * คืน repo.id ของทุก row ที่เป็น GitHub repo เดียวกัน (githubRepoId เท่ากัน)
+   * เพื่อให้ผู้ใช้ที่จับคู่กันเห็น test case / folder ชุดเดียวกัน
+   * ยังคงตรวจสิทธิ์ก่อนว่า user ที่ขอเป็นเจ้าของ repo row ที่ส่งมาจริง
+   */
+  async getSharedRepoIds(userId: string, repoId: string): Promise<string[]> {
+    const repo = await this.findOneForUser(userId, repoId);
+    const siblings = await this.repoRepository.find({
+      where: { fullName: repo.fullName },
+      select: ['id'],
+    });
+    return siblings.map((r) => r.id);
+  }
+
   async syncFromGithub(userId: string): Promise<{ synced: number; total: number }> {
     const pat = await this.githubTokensService.getDecryptedToken(userId);
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token กรุณาเพิ่มก่อน');

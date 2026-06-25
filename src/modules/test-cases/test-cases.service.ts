@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, In } from 'typeorm';
 import { TestCase } from './entities/test-case.entity';
 import { TestCaseFolder } from './entities/test-case-folder.entity';
 import { RepositoriesService } from '../repositories/repositories.service';
@@ -21,9 +21,9 @@ export class TestCasesService {
   // ── Folders ───────────────────────────────────────────────────────────
 
   async getFolders(userId: string, repoId: string): Promise<TestCaseFolder[]> {
-    await this.repoService.findOneForUser(userId, repoId);
+    const repoIds = await this.repoService.getSharedRepoIds(userId, repoId);
     return this.folderRepo.find({
-      where: { repoId, parentId: IsNull() },
+      where: { repoId: In(repoIds), parentId: IsNull() },
       relations: ['children', 'children.children'],
       order: { orderIndex: 'ASC', name: 'ASC' },
     });
@@ -40,16 +40,16 @@ export class TestCasesService {
   }
 
   async updateFolder(userId: string, repoId: string, folderId: string, dto: UpdateFolderDto): Promise<TestCaseFolder> {
-    await this.repoService.findOneForUser(userId, repoId);
-    const folder = await this.folderRepo.findOne({ where: { id: folderId, repoId } });
+    const repoIds = await this.repoService.getSharedRepoIds(userId, repoId);
+    const folder = await this.folderRepo.findOne({ where: { id: folderId, repoId: In(repoIds) } });
     if (!folder) throw new NotFoundException('Folder not found');
     folder.name = dto.name;
     return this.folderRepo.save(folder);
   }
 
   async deleteFolder(userId: string, repoId: string, folderId: string): Promise<void> {
-    await this.repoService.findOneForUser(userId, repoId);
-    const folder = await this.folderRepo.findOne({ where: { id: folderId, repoId } });
+    const repoIds = await this.repoService.getSharedRepoIds(userId, repoId);
+    const folder = await this.folderRepo.findOne({ where: { id: folderId, repoId: In(repoIds) } });
     if (!folder) throw new NotFoundException('Folder not found');
     await this.folderRepo.remove(folder);
   }
@@ -65,10 +65,10 @@ export class TestCasesService {
     page?: number;
     pageSize?: number;
   }) {
-    await this.repoService.findOneForUser(userId, repoId);
+    const repoIds = await this.repoService.getSharedRepoIds(userId, repoId);
     const { folderId, status, testType, priority, search, page = 1, pageSize = 20 } = params;
 
-    const qb = this.tcRepo.createQueryBuilder('tc').where('tc.repoId = :repoId', { repoId });
+    const qb = this.tcRepo.createQueryBuilder('tc').where('tc.repoId IN (:...repoIds)', { repoIds });
 
     if (folderId) qb.andWhere('tc.folderId = :folderId', { folderId });
     if (status) qb.andWhere('tc.status = :status', { status });
@@ -83,8 +83,8 @@ export class TestCasesService {
   }
 
   async findOne(userId: string, repoId: string, id: string): Promise<TestCase> {
-    await this.repoService.findOneForUser(userId, repoId);
-    const tc = await this.tcRepo.findOne({ where: { id, repoId } });
+    const repoIds = await this.repoService.getSharedRepoIds(userId, repoId);
+    const tc = await this.tcRepo.findOne({ where: { id, repoId: In(repoIds) } });
     if (!tc) throw new NotFoundException('Test case not found');
     return tc;
   }

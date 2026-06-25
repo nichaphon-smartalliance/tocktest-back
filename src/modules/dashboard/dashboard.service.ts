@@ -20,17 +20,28 @@ export class DashboardService {
   async getQaSummary(userId: string) {
     const emptyStatus = { pass: 0, fail: 0, blocked: 0, not_tested: 0 };
 
-    const [totalRepos, allRepoIds, recentRepos, hasGithubToken] = await Promise.all([
+    const [totalRepos, ownRepos, hasGithubToken] = await Promise.all([
       this.repoRepo.count({ where: { userId } }),
-      this.repoRepo.find({ where: { userId }, select: ['id'] }).then((r) => r.map((x) => x.id)),
-      this.repoRepo.find({
-        where: { userId },
-        order: { updatedAt: 'DESC' },
-      }),
+      this.repoRepo.find({ where: { userId }, order: { updatedAt: 'DESC' } }),
       this.githubTokensService.hasActiveToken(userId),
     ]);
 
-    if (allRepoIds.length === 0) {
+    const recentRepos = ownRepos;
+    const ownFullNames = ownRepos.map((r) => r.fullName);
+
+    // Expand to all accounts' copies of the same GitHub repos (matched by full_name)
+    const allSharedRepos = ownFullNames.length > 0
+      ? await this.repoRepo.find({ where: { fullName: In(ownFullNames) }, select: ['id', 'fullName'] })
+      : [];
+    const allRepoIds = allSharedRepos.map((r) => r.id);
+
+    // Map own repo fullName → all sibling repo IDs (for per-repo stats aggregation)
+    const siblingMap = new Map<string, string[]>(ownRepos.map((r) => [r.fullName, []]));
+    for (const r of allSharedRepos) {
+      siblingMap.get(r.fullName)?.push(r.id);
+    }
+
+    if (ownRepos.length === 0) {
       const capabilities = this.buildCapabilities({
         totalRepos,
         totalTestCases: 0,
@@ -90,7 +101,7 @@ export class DashboardService {
       }
     }
 
-    const perRepoMap = new Map(
+    const perRepoById = new Map(
       perRepoRows.map((r) => [
         r.repoId,
         {
@@ -102,6 +113,17 @@ export class DashboardService {
         },
       ]),
     );
+
+    // Aggregate sibling stats under each own repo's fullName
+    const statsForFullName = new Map<string, { total: number; passCount: number; failCount: number; blockedCount: number; notTestedCount: number }>();
+    for (const [fullName, siblingIds] of siblingMap) {
+      let total = 0, passCount = 0, failCount = 0, blockedCount = 0, notTestedCount = 0;
+      for (const id of siblingIds) {
+        const s = perRepoById.get(id);
+        if (s) { total += s.total; passCount += s.passCount; failCount += s.failCount; blockedCount += s.blockedCount; notTestedCount += s.notTestedCount; }
+      }
+      statsForFullName.set(fullName, { total, passCount, failCount, blockedCount, notTestedCount });
+    }
 
     const executed = byStatus.pass + byStatus.fail + byStatus.blocked;
     const passRate = executed > 0 ? Math.round((byStatus.pass / executed) * 100) : 0;
@@ -123,7 +145,7 @@ export class DashboardService {
       capabilities,
       nextMilestones: this.buildNextMilestones(capabilities),
       recentRepos: recentRepos.map((r) => {
-        const stats = perRepoMap.get(r.id);
+        const stats = statsForFullName.get(r.fullName);
         return {
           id: r.id,
           fullName: r.fullName,
