@@ -154,6 +154,8 @@ async function ensureRepoSettingsEnhancements(dataSource: DataSource) {
     await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_last_commit_sha VARCHAR(64)');
     await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_last_source_sha VARCHAR(64)');
     await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_source_cache JSONB');
+    await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_deleted_by_email VARCHAR(255)');
+    await dataSource.query('ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS docs_deleted_at TIMESTAMPTZ');
   } catch (error) {
     console.warn('Could not ensure repo_settings enhancements:', (error as Error)?.message ?? error);
   }

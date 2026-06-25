@@ -57,6 +57,12 @@ export class RepoSettings {
   @Column({ name: 'docs_source_cache', type: 'jsonb', nullable: true })
   docsSourceCache: Record<string, unknown> | null;
 
+  @Column({ name: 'docs_deleted_by_email', nullable: true, type: 'varchar' })
+  docsDeletedByEmail: string | null;
+
+  @Column({ name: 'docs_deleted_at', nullable: true, type: 'timestamptz' })
+  docsDeletedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
