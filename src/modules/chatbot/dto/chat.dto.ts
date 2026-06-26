@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ChatMessageDto {
@@ -20,4 +20,9 @@ export class ChatRequestDto {
   @ValidateNested({ each: true })
   @Type(() => ChatMessageDto)
   history?: ChatMessageDto[];
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['th', 'en'])
+  language?: 'th' | 'en';
 }

@@ -31,16 +31,16 @@ interface PrReviewResult {
   mergeRecommendation: string;
 }
 
-const RISK_EMOJI: Record<string, string> = { low: '🟢', medium: '🟡', high: '🔴' };
+const RISK_LABEL: Record<string, string> = { low: '[LOW]', medium: '[MEDIUM]', high: '[HIGH]' };
 const RECOMMENDATION_LABEL: Record<string, string> = {
-  approve: '✅ Approve',
-  comment: '💬 Comment',
-  request_changes: '🔁 Request changes',
+  approve: 'Approve',
+  comment: 'Comment',
+  request_changes: 'Request changes',
 };
 
 export function formatPrReviewComment(review: PrReviewResult): string {
-  let md = `### 🤖 TockTest AI PR Review\n\n`;
-  md += `**Risk level:** ${RISK_EMOJI[review.riskLevel] ?? ''} ${review.riskLevel}\n`;
+  let md = `### TockTest AI PR Review\n\n`;
+  md += `**Risk level:** ${RISK_LABEL[review.riskLevel] ?? review.riskLevel}\n`;
   md += `**Recommendation:** ${RECOMMENDATION_LABEL[review.mergeRecommendation] ?? review.mergeRecommendation}\n\n`;
   md += `${review.summary || '_No summary provided._'}\n`;
 

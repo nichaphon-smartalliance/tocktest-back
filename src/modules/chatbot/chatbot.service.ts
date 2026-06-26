@@ -33,7 +33,7 @@ Repository context:
 ${context}
 
 Answer questions accurately and helpfully. If asked to write test code, produce Cypress TypeScript by default.
-Keep responses focused and practical. Respond in the same language as the user's message.`;
+Keep responses focused and practical. ${dto.language === 'en' ? 'Respond in English only.' : 'Respond in Thai (ภาษาไทย) only.'}`;
 
     const messages = [
       { role: 'system' as const, content: systemPrompt },

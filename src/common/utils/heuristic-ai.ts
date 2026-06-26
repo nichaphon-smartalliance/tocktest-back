@@ -117,7 +117,7 @@ export function heuristicChat(messages: Array<{ role: string; content: string }>
   if (commits.length > 0) {
     summary.push(`**Recent commits:** ${commits.length} analyzed — ${highRisk.length} high/critical risk`);
   }
-  if (failing.length > 0) summary.push(`⚠️ **${failing.length} failing test(s)** need attention`);
+  if (failing.length > 0) summary.push(`**${failing.length} failing test(s) need attention.**`);
   summary.push('\nAsk me about: test priorities, risk areas, commit changes, or to generate a Cypress test.');
   return summary.join('\n');
 }
