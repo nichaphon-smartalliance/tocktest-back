@@ -26,6 +26,12 @@ export class ChatbotService {
 
     const context = await this.buildContext(repoId, repo.fullName);
 
+    const isEn = dto.language === 'en';
+    const langDirective = isEn
+      ? 'CRITICAL: Reply ONLY in English. The repository context above may be in Thai, but you MUST answer in English regardless.'
+      : 'CRITICAL: ตอบเป็นภาษาไทยเท่านั้น ไม่ว่าข้อมูลหรือคำถามจะเป็นภาษาใดก็ตาม';
+    const userPrefix = isEn ? '[Answer in English] ' : '[ตอบเป็นภาษาไทย] ';
+
     const systemPrompt = `You are a QA assistant for the repository "${repo.fullName}".
 You help with test planning, test case design, and quality assurance questions.
 
@@ -33,15 +39,17 @@ Repository context:
 ${context}
 
 Answer questions accurately and helpfully. If asked to write test code, produce Cypress TypeScript by default.
-Keep responses focused and practical. ${dto.language === 'en' ? 'Respond in English only.' : 'Respond in Thai (ภาษาไทย) only.'}`;
+Keep responses focused and practical.
+
+${langDirective}`;
 
     const messages = [
       { role: 'system' as const, content: systemPrompt },
       ...(dto.history ?? []).slice(-8).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-      { role: 'user' as const, content: dto.message },
+      { role: 'user' as const, content: `${userPrefix}${dto.message}` },
     ];
 
-    const response = await this.aiService.chat(messages, { repoId });
+    const response = await this.aiService.chat(messages, { repoId, language: dto.language });
     return { response, repoId };
   }
 

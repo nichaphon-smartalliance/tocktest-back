@@ -24,6 +24,7 @@ interface ChatMessage {
 interface AiExecutionOptions {
   forceOffline?: boolean;
   repoId?: string;
+  language?: 'th' | 'en';
 }
 
 @Injectable()
@@ -55,11 +56,6 @@ export class AiService {
 
   // ── Core AI chat ──────────────────────────────────────────────────────
 
-  /** Returns true if any AI backend is usable (including heuristic fallback). */
-  async isAvailable(): Promise<boolean> {
-    return true; // heuristic fallback always available
-  }
-
   private async isRemoteAiAvailable(): Promise<boolean> {
     if (this.openaiApiKey) return true;
     if (this.availCache && Date.now() - this.availCache.ts < this.AVAIL_TTL_MS) {
@@ -76,7 +72,8 @@ export class AiService {
   }
 
   async healthCheck(): Promise<{ available: boolean }> {
-    return { available: await this.isAvailable() };
+    // Report the REAL AI service status (not the always-on heuristic fallback)
+    return { available: await this.isRemoteAiAvailable() };
   }
 
   private async shouldUseOfflineMode(options?: AiExecutionOptions): Promise<boolean> {
@@ -110,7 +107,7 @@ export class AiService {
     }
     // Heuristic fallback — uses real repo data from context, no external AI needed
     this.logger.warn('AI offline — using heuristic chat');
-    return heuristicChat(messages);
+    return heuristicChat(messages, options?.language ?? 'th');
   }
 
   private async openaiChat(messages: ChatMessage[]): Promise<string> {

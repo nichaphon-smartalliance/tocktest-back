@@ -42,11 +42,17 @@ function classify(msg: string): string {
   return 'general';
 }
 
-export function heuristicChat(messages: Array<{ role: string; content: string }>): string {
+type ChatLang = 'th' | 'en';
+
+export function heuristicChat(
+  messages: Array<{ role: string; content: string }>,
+  lang: ChatLang = 'th',
+): string {
   const system = messages.find((m) => m.role === 'system')?.content ?? '';
   const userMsg = messages.filter((m) => m.role === 'user').at(-1)?.content ?? '';
   const ctx = parseContext(system);
   const intent = classify(userMsg);
+  const en = lang === 'en';
 
   const { testCases, commits, repoName } = ctx;
   const highRisk = commits.filter((c) => c.risk === 'high' || c.risk === 'critical');
@@ -55,28 +61,39 @@ export function heuristicChat(messages: Array<{ role: string; content: string }>
   const highPri = testCases.filter((tc) => tc.priority === 'high' || tc.priority === 'critical');
 
   if (intent === 'risk') {
-    if (highRisk.length === 0) return `No high-risk commits found in recent history for **${repoName}**. All recent changes appear low-to-medium risk.`;
+    if (highRisk.length === 0) {
+      return en
+        ? `No high-risk commits found in recent history for **${repoName}**. All recent changes appear low-to-medium risk.`
+        : `ไม่พบ commit ความเสี่ยงสูงในประวัติล่าสุดของ **${repoName}** การเปลี่ยนแปลงล่าสุดอยู่ในระดับต่ำถึงปานกลาง`;
+    }
     const lines = highRisk.map((c) => `- **[${c.risk}]** ${c.message}${c.summary ? ` — ${c.summary}` : ''}`).join('\n');
-    return `### High-Risk Changes in ${repoName}\n\n${lines}\n\nRecommend running full regression on affected areas before release.`;
+    return en
+      ? `### High-Risk Changes in ${repoName}\n\n${lines}\n\nRecommend running full regression on affected areas before release.`
+      : `### การเปลี่ยนแปลงความเสี่ยงสูงใน ${repoName}\n\n${lines}\n\nแนะนำให้รัน regression เต็มรูปแบบในส่วนที่ได้รับผลกระทบก่อน release`;
   }
 
   if (intent === 'priority') {
-    const parts: string[] = [`### Where to Focus Testing — ${repoName}\n`];
+    const parts: string[] = [en ? `### Where to Focus Testing — ${repoName}\n` : `### ควรเน้นทดสอบส่วนไหน — ${repoName}\n`];
     if (failing.length > 0) {
-      parts.push(`**Failing tests (fix first):**\n${failing.map((tc) => `- ${tc.title}`).join('\n')}`);
+      parts.push(`${en ? '**Failing tests (fix first):**' : '**Test ที่ fail (แก้ก่อน):**'}\n${failing.map((tc) => `- ${tc.title}`).join('\n')}`);
     }
     if (highRisk.length > 0) {
-      parts.push(`**High-risk recent changes (cover with tests):**\n${highRisk.map((c) => `- ${c.message}`).join('\n')}`);
+      parts.push(`${en ? '**High-risk recent changes (cover with tests):**' : '**การเปลี่ยนแปลงความเสี่ยงสูง (ควรเขียน test ครอบคลุม):**'}\n${highRisk.map((c) => `- ${c.message}`).join('\n')}`);
     }
     if (highPri.length > 0) {
-      parts.push(`**High-priority untested cases:**\n${untested.filter((tc) => tc.priority === 'high' || tc.priority === 'critical').slice(0, 5).map((tc) => `- ${tc.title}`).join('\n') || 'None'}`);
+      const list = untested.filter((tc) => tc.priority === 'high' || tc.priority === 'critical').slice(0, 5).map((tc) => `- ${tc.title}`).join('\n') || (en ? 'None' : 'ไม่มี');
+      parts.push(`${en ? '**High-priority untested cases:**' : '**Test case priority สูงที่ยังไม่ทดสอบ:**'}\n${list}`);
     }
-    if (parts.length === 1) parts.push('No failing tests or high-risk commits found. Focus on adding coverage for untested areas.');
+    if (parts.length === 1) parts.push(en ? 'No failing tests or high-risk commits found. Focus on adding coverage for untested areas.' : 'ไม่พบ test ที่ fail หรือ commit ความเสี่ยงสูง เน้นเพิ่ม coverage ในส่วนที่ยังไม่ทดสอบ');
     return parts.join('\n\n');
   }
 
   if (intent === 'list') {
-    if (testCases.length === 0) return `No test cases found for **${repoName}** yet. Use the Test Cases page to create some.`;
+    if (testCases.length === 0) {
+      return en
+        ? `No test cases found for **${repoName}** yet. Use the Test Cases page to create some.`
+        : `ยังไม่พบ test case สำหรับ **${repoName}** สร้างได้ที่หน้า Test Cases`;
+    }
     const byStatus: Record<string, string[]> = {};
     for (const tc of testCases) {
       (byStatus[tc.status] ??= []).push(tc.title);
@@ -84,13 +101,17 @@ export function heuristicChat(messages: Array<{ role: string; content: string }>
     const lines = Object.entries(byStatus).map(([s, titles]) =>
       `**${s}** (${titles.length})\n${titles.map((t) => `  - ${t}`).join('\n')}`,
     );
-    return `### Test Cases — ${repoName}\n\n${lines.join('\n\n')}`;
+    return `### ${en ? 'Test Cases' : 'รายการ Test Case'} — ${repoName}\n\n${lines.join('\n\n')}`;
   }
 
   if (intent === 'commits') {
-    if (commits.length === 0) return `No recent commit analysis found for **${repoName}**. Run Commit Analysis from the Analysis page first.`;
+    if (commits.length === 0) {
+      return en
+        ? `No recent commit analysis found for **${repoName}**. Run Commit Analysis from the Analysis page first.`
+        : `ยังไม่พบผลวิเคราะห์ commit ล่าสุดของ **${repoName}** รัน Commit Analysis ที่หน้า Analysis ก่อน`;
+    }
     const lines = commits.map((c) => `- **[${c.risk} risk]** ${c.message}${c.summary ? `\n  ${c.summary}` : ''}`).join('\n');
-    return `### Recent Commits — ${repoName}\n\n${lines}`;
+    return `### ${en ? 'Recent Commits' : 'Commit ล่าสุด'} — ${repoName}\n\n${lines}`;
   }
 
   if (intent === 'generate') {
@@ -98,27 +119,39 @@ export function heuristicChat(messages: Array<{ role: string; content: string }>
     const specLines = relevant.length > 0
       ? relevant.map((tc) => `  // ${tc.title}\n  it('${tc.title}', () => {\n    // TODO: implement\n  });`).join('\n\n')
       : `  it('should work as expected', () => {\n    // TODO: implement\n  });`;
-    return `Here is a Cypress TypeScript template based on existing test cases in **${repoName}**:\n\n\`\`\`typescript\ndescribe('${repoName} — QA Suite', () => {\n  beforeEach(() => {\n    cy.visit('/');\n  });\n\n${specLines}\n});\n\`\`\`\n\n> Refine each \`it\` block with actual selectors and assertions from your app.`;
+    const intro = en
+      ? `Here is a Cypress TypeScript template based on existing test cases in **${repoName}**:`
+      : `นี่คือ template Cypress TypeScript จาก test case ที่มีอยู่ใน **${repoName}**:`;
+    const outro = en
+      ? `> Refine each \`it\` block with actual selectors and assertions from your app.`
+      : `> ปรับแต่ละ \`it\` block ด้วย selector และ assertion จริงจากแอปของคุณ`;
+    return `${intro}\n\n\`\`\`typescript\ndescribe('${repoName} — QA Suite', () => {\n  beforeEach(() => {\n    cy.visit('/');\n  });\n\n${specLines}\n});\n\`\`\`\n\n${outro}`;
   }
 
   if (intent === 'docs') {
-    if (!ctx.docs) return `No project documentation found for **${repoName}**. Add docs via the Docs page.`;
-    return `### Project Documentation — ${repoName}\n\n${ctx.docs.slice(0, 1000)}${ctx.docs.length > 1000 ? '\n\n*(truncated — see Docs page for full content)*' : ''}`;
+    if (!ctx.docs) {
+      return en
+        ? `No project documentation found for **${repoName}**. Add docs via the Docs page.`
+        : `ยังไม่พบ documentation ของ **${repoName}** เพิ่มได้ที่หน้า Docs`;
+    }
+    const truncated = ctx.docs.length > 1000 ? (en ? '\n\n*(truncated — see Docs page for full content)*' : '\n\n*(ตัดบางส่วน — ดูเนื้อหาเต็มที่หน้า Docs)*') : '';
+    return `### ${en ? 'Project Documentation' : 'เอกสารโปรเจกต์'} — ${repoName}\n\n${ctx.docs.slice(0, 1000)}${truncated}`;
   }
 
   // general fallback — give real overview
-  const summary: string[] = [`**${repoName}** QA overview:\n`];
+  const summary: string[] = [en ? `**${repoName}** QA overview:\n` : `ภาพรวม QA ของ **${repoName}**:\n`];
   if (testCases.length > 0) {
     const statMap = testCases.reduce<Record<string, number>>((acc, tc) => { acc[tc.status] = (acc[tc.status] ?? 0) + 1; return acc; }, {});
-    summary.push(`**Test cases:** ${testCases.length} total — ${Object.entries(statMap).map(([k, v]) => `${v} ${k}`).join(', ')}`);
+    const stats = Object.entries(statMap).map(([k, v]) => `${v} ${k}`).join(', ');
+    summary.push(en ? `**Test cases:** ${testCases.length} total — ${stats}` : `**Test case:** ${testCases.length} รายการ — ${stats}`);
   } else {
-    summary.push('No test cases yet.');
+    summary.push(en ? 'No test cases yet.' : 'ยังไม่มี test case');
   }
   if (commits.length > 0) {
-    summary.push(`**Recent commits:** ${commits.length} analyzed — ${highRisk.length} high/critical risk`);
+    summary.push(en ? `**Recent commits:** ${commits.length} analyzed — ${highRisk.length} high/critical risk` : `**Commit ล่าสุด:** วิเคราะห์แล้ว ${commits.length} รายการ — เสี่ยงสูง/วิกฤต ${highRisk.length}`);
   }
-  if (failing.length > 0) summary.push(`**${failing.length} failing test(s) need attention.**`);
-  summary.push('\nAsk me about: test priorities, risk areas, commit changes, or to generate a Cypress test.');
+  if (failing.length > 0) summary.push(en ? `**${failing.length} failing test(s) need attention.**` : `**มี test ที่ fail ${failing.length} รายการที่ต้องแก้**`);
+  summary.push(en ? '\nAsk me about: test priorities, risk areas, commit changes, or to generate a Cypress test.' : '\nถามได้เลย: ลำดับความสำคัญในการทดสอบ, จุดเสี่ยง, การเปลี่ยนแปลง commit หรือให้สร้าง Cypress test');
   return summary.join('\n');
 }
 
