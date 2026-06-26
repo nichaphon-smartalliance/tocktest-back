@@ -188,23 +188,26 @@ export class GithubTokensService {
       page++;
     }
 
-    for (const gr of repos) {
-      await this.repoRepo.upsert(
-        {
-          userId,
-          githubRepoId: gr.id,
-          fullName: gr.full_name,
-          name: gr.name,
-          description: gr.description,
-          defaultBranch: gr.default_branch,
-          isPrivate: gr.private,
-          htmlUrl: gr.html_url,
-          cloneUrl: gr.clone_url,
-          ownerLogin: gr.owner?.login,
-          lastSyncedAt: new Date(),
-        },
-        { conflictPaths: ['userId', 'githubRepoId'] },
-      );
+    const now = new Date();
+    const rows = repos.map((gr) => ({
+      userId,
+      githubRepoId: gr.id,
+      fullName: gr.full_name,
+      name: gr.name,
+      description: gr.description,
+      defaultBranch: gr.default_branch,
+      isPrivate: gr.private,
+      htmlUrl: gr.html_url,
+      cloneUrl: gr.clone_url,
+      ownerLogin: gr.owner?.login,
+      lastSyncedAt: now,
+    }));
+
+    const CHUNK = 100;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await this.repoRepo.upsert(rows.slice(i, i + CHUNK), {
+        conflictPaths: ['userId', 'githubRepoId'],
+      });
     }
   }
 }

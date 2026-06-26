@@ -71,29 +71,29 @@ export class RepositoriesService {
       await this.repoRepository.delete({ userId });
     }
 
-    let synced = 0;
+    const now = new Date();
+    const rows = githubRepos.map((gr) => ({
+      userId,
+      githubRepoId: gr.id,
+      fullName: gr.full_name,
+      name: gr.name,
+      description: gr.description,
+      defaultBranch: gr.default_branch,
+      isPrivate: gr.private,
+      htmlUrl: gr.html_url,
+      cloneUrl: gr.clone_url,
+      ownerLogin: gr.owner?.login,
+      lastSyncedAt: now,
+    }));
 
-    for (const gr of githubRepos) {
-      await this.repoRepository.upsert(
-        {
-          userId,
-          githubRepoId: gr.id,
-          fullName: gr.full_name,
-          name: gr.name,
-          description: gr.description,
-          defaultBranch: gr.default_branch,
-          isPrivate: gr.private,
-          htmlUrl: gr.html_url,
-          cloneUrl: gr.clone_url,
-          ownerLogin: gr.owner?.login,
-          lastSyncedAt: new Date(),
-        },
-        { conflictPaths: ['userId', 'githubRepoId'] },
-      );
-      synced++;
+    const CHUNK = 100;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await this.repoRepository.upsert(rows.slice(i, i + CHUNK), {
+        conflictPaths: ['userId', 'githubRepoId'],
+      });
     }
 
-    return { synced, total: githubRepos.length };
+    return { synced: rows.length, total: githubRepos.length };
   }
 
   async getBranches(userId: string, repoId: string): Promise<any[]> {

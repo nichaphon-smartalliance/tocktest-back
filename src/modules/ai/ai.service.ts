@@ -90,8 +90,6 @@ export class AiService {
   }
 
   async chat(messages: ChatMessage[], options?: AiExecutionOptions): Promise<string> {
-    messages[0].content += " ตอบกลับเป็น ภาษาไทย";
-    console.log("AI chat messages:", messages); 
     try {
       const res = await axios.post(
         `${this.apiUrl}/chat`,
@@ -197,20 +195,22 @@ export class AiService {
 
   async fetchProjectContext(fullName: string, pat: string): Promise<string> {
     const files = ['CLAUDE.md', 'README.md'];
-    const parts: string[] = [];
-    for (const file of files) {
-      try {
-        const res = await axios.get(
-          `https://api.github.com/repos/${fullName}/contents/${file}`,
-          { headers: { Authorization: `token ${pat}` }, timeout: 5000 },
-        );
-        const content = Buffer.from(res.data.content, 'base64').toString('utf-8');
-        parts.push(`--- ${file} ---\n${content.slice(0, 3000)}`);
-      } catch {
-        // file not found or inaccessible — skip silently
-      }
-    }
-    return parts.join('\n\n');
+    const results = await Promise.all(
+      files.map(async (file) => {
+        try {
+          const res = await axios.get(
+            `https://api.github.com/repos/${fullName}/contents/${file}`,
+            { headers: { Authorization: `token ${pat}` }, timeout: 5000 },
+          );
+          const content = Buffer.from(res.data.content, 'base64').toString('utf-8');
+          return `--- ${file} ---\n${content.slice(0, 3000)}`;
+        } catch {
+          // file not found or inaccessible — skip silently
+          return null;
+        }
+      }),
+    );
+    return results.filter(Boolean).join('\n\n');
   }
 
   // ── Commit Analysis ───────────────────────────────────────────────────
@@ -347,14 +347,15 @@ export class AiService {
         shas = res.data.map((c: any) => c.sha);
       }
 
-      const diffs: string[] = [];
-      for (const sha of shas.slice(0, 5)) {
-        const res = await axios.get(
-          `https://api.github.com/repos/${fullName}/commits/${sha}`,
-          { headers: { Authorization: `token ${pat}`, Accept: 'application/vnd.github.v3.diff' }, timeout: 10000 },
-        );
-        diffs.push(`--- Commit ${sha} ---\n${res.data}`);
-      }
+      const diffs = await Promise.all(
+        shas.slice(0, 5).map(async (sha: string) => {
+          const res = await axios.get(
+            `https://api.github.com/repos/${fullName}/commits/${sha}`,
+            { headers: { Authorization: `token ${pat}`, Accept: 'application/vnd.github.v3.diff' }, timeout: 10000 },
+          );
+          return `--- Commit ${sha} ---\n${res.data}`;
+        }),
+      );
       return diffs.join('\n\n').slice(0, 20000);
     } catch (err: any) {
       this.logger.warn(`fetchCommitDiffs error: ${err.message}`);
