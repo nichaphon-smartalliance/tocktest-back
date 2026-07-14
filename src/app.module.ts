@@ -1,7 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { GithubTokensModule } from './modules/github-tokens/github-tokens.module';
@@ -25,11 +26,11 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
-        host: process.env.DB_HOST || 'localhost',
-        port: process.env.DB_PORT ? parseInt(process.env.DB_PORT) : 5432,
-        username: process.env.DB_USERNAME || 'postgres',
-        password: process.env.DB_PASSWORD || 'smart2026#',
-        database: process.env.DB_NAME || 'tocktest_db',
+        host: config.get<string>('DB_HOST', 'localhost'),
+        port: config.get<number>('DB_PORT', 5432),
+        username: config.getOrThrow<string>('DB_USERNAME'),
+        password: config.getOrThrow<string>('DB_PASSWORD'),
+        database: config.get<string>('DB_NAME', 'tocktest_db'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: false,
         logging: process.env.NODE_ENV === 'development',
@@ -48,6 +49,12 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
     GithubAppModule,
     JobsModule,
     ChatbotModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

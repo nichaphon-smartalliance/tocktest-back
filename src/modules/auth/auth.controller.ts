@@ -20,6 +20,7 @@ export class AuthController {
   @Public()
   @Post('github')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
   loginWithGithub(@Body() dto: GithubLoginDto) {
     return this.authService.loginWithGithub(dto);
   }

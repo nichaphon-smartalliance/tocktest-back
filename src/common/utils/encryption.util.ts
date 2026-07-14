@@ -1,8 +1,10 @@
 import * as crypto from 'crypto';
 import { InternalServerErrorException } from '@nestjs/common';
 
-const ALGORITHM = 'aes-256-cbc';
-const IV_LENGTH = 16;
+const ALGORITHM = 'aes-256-gcm';
+const LEGACY_ALGORITHM = 'aes-256-cbc';
+const IV_LENGTH = 12;
+const LEGACY_IV_LENGTH = 16;
 
 function getKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY;
@@ -17,10 +19,24 @@ export function encrypt(text: string): string {
   const cipher = crypto.createCipheriv(ALGORITHM, getKey(), iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-  return `${iv.toString('hex')}:${encrypted}`;
+  const tag = cipher.getAuthTag();
+  return `v2:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
 }
 
 export function decrypt(encrypted: string): string {
+  if (encrypted.startsWith('v2:')) {
+    const [, ivHex, tagHex, encryptedHex] = encrypted.split(':');
+    if (!ivHex || !tagHex || !encryptedHex) {
+      throw new InternalServerErrorException('Invalid encrypted token format');
+    }
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  }
+
   const colonIdx = encrypted.indexOf(':');
   if (colonIdx === -1) {
     throw new InternalServerErrorException('Invalid encrypted token format');
@@ -31,7 +47,10 @@ export function decrypt(encrypted: string): string {
     throw new InternalServerErrorException('Invalid encrypted token format');
   }
   const iv = Buffer.from(ivHex, 'hex');
-  const decipher = crypto.createDecipheriv(ALGORITHM, getKey(), iv);
+  if (iv.length !== LEGACY_IV_LENGTH) {
+    throw new InternalServerErrorException('Invalid encrypted token format');
+  }
+  const decipher = crypto.createDecipheriv(LEGACY_ALGORITHM, getKey(), iv);
   let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;

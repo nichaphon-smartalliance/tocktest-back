@@ -48,11 +48,7 @@ export class RepositoriesService {
    */
   async getSharedRepoIds(userId: string, repoId: string): Promise<string[]> {
     const repo = await this.findOneForUser(userId, repoId);
-    const siblings = await this.repoRepository.find({
-      where: { fullName: repo.fullName },
-      select: ['id'],
-    });
-    return siblings.map((r) => r.id);
+    return [repo.id];
   }
 
   async syncFromGithub(userId: string): Promise<{ synced: number; total: number }> {

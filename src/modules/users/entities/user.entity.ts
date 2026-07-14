@@ -38,6 +38,9 @@ export class User {
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
+  @Column({ name: 'session_version', type: 'int', default: 0 })
+  sessionVersion: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

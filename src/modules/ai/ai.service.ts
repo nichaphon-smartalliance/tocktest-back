@@ -14,7 +14,7 @@ import {
   buildPullRequestReviewPrompt,
 } from './prompts';
 import { normalizePriority, normalizeRiskLevel, normalizeTestType } from '../../common/utils/normalize-ai';
-import { heuristicAnalyzeCommit, heuristicGenerateTestCases, heuristicWhatToTest, heuristicChat } from '../../common/utils/heuristic-ai';
+import { heuristicAnalyzeCommit, heuristicWhatToTest, heuristicChat } from '../../common/utils/heuristic-ai';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';

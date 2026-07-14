@@ -14,11 +14,21 @@ async function bootstrap() {
   await ensureBackgroundJobsTable(dataSource);
   await ensureGithubOAuthAppSchema(dataSource);
   await ensureGithubLoginSchema(dataSource);
+  await ensureUserSessionVersionSchema(dataSource);
   await ensureRepositoryInstallationSchema(dataSource);
   await ensureRepoSettingsEnhancements(dataSource);
 
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+  });
+
+  const corsOrigins = resolveCorsOrigins();
   app.enableCors({
-    origin: process.env.FRONTEND_URL ? process.env.FRONTEND_URL : true,
+    origin: corsOrigins,
     credentials: true,
   });
 
@@ -37,12 +47,23 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalGuards(new JwtAuthGuard(app.get(Reflector)));
-  // ThrottlerGuard requires the module to be configured via APP_GUARD in AppModule if needed globally
-  // But for now the ThrottlerModule provides per-route opt-in via @Throttle decorators
 
   const port = process.env.PORT || 4004;
   await app.listen(port);
   console.log(`TockTest Backend running on http://localhost:${port}`);
+}
+
+function resolveCorsOrigins(): string[] {
+  const configured = (process.env.FRONTEND_URL ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (configured.length > 0) return configured;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('FRONTEND_URL must be configured in production');
+  }
+  return ['http://localhost:4003', 'http://localhost:3012'];
 }
 
 async function ensureGithubTokenExpiresAt(dataSource: DataSource) {
@@ -130,6 +151,14 @@ async function ensureGithubLoginSchema(dataSource: DataSource) {
     );
   } catch (error : {message?: string} | any) {
     console.warn('Could not ensure GitHub login schema:', error.message ?? error);
+  }
+}
+
+async function ensureUserSessionVersionSchema(dataSource: DataSource) {
+  try {
+    await dataSource.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0');
+  } catch (error : {message?: string} | any) {
+    console.warn('Could not ensure user session version schema:', error.message ?? error);
   }
 }
 

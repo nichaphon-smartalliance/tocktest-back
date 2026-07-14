@@ -31,6 +31,7 @@ export class TestCasesService {
 
   async createFolder(userId: string, repoId: string, dto: CreateFolderDto): Promise<TestCaseFolder> {
     await this.repoService.findOneForUser(userId, repoId);
+    if (dto.parentId) await this.assertFolderBelongsToRepo(repoId, dto.parentId);
     const folder = this.folderRepo.create({
       repoId,
       name: dto.name,
@@ -91,12 +92,14 @@ export class TestCasesService {
 
   async create(userId: string, repoId: string, dto: CreateTestCaseDto): Promise<TestCase> {
     await this.repoService.findOneForUser(userId, repoId);
+    if (dto.folderId) await this.assertFolderBelongsToRepo(repoId, dto.folderId);
     const tc = this.tcRepo.create({ ...dto, repoId, createdBy: userId });
     return this.tcRepo.save(tc);
   }
 
   async update(userId: string, repoId: string, id: string, dto: UpdateTestCaseDto): Promise<TestCase> {
     const tc = await this.findOne(userId, repoId, id);
+    if (dto.folderId) await this.assertFolderBelongsToRepo(repoId, dto.folderId);
     Object.assign(tc, dto);
     return this.tcRepo.save(tc);
   }
@@ -108,10 +111,17 @@ export class TestCasesService {
 
   async bulkSave(userId: string, repoId: string, dto: BulkSaveTestCasesDto): Promise<TestCase[]> {
     await this.repoService.findOneForUser(userId, repoId);
+    const folderIds = [...new Set(dto.testCases.map((tc) => tc.folderId).filter((id): id is string => !!id))];
+    for (const folderId of folderIds) await this.assertFolderBelongsToRepo(repoId, folderId);
     const items = dto.testCases.map((tc) =>
       this.tcRepo.create({ ...tc, repoId, createdBy: userId, isAiGenerated: true }),
     );
     return this.tcRepo.save(items);
+  }
+
+  private async assertFolderBelongsToRepo(repoId: string, folderId: string): Promise<void> {
+    const folder = await this.folderRepo.findOne({ where: { id: folderId, repoId } });
+    if (!folder) throw new NotFoundException('Folder not found');
   }
 
 }

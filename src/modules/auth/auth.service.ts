@@ -56,8 +56,8 @@ export class AuthService {
         axios.get('https://api.github.com/user/emails', { headers, timeout: 10000 }),
       ]);
 
-      const primaryEmail = Array.isArray(emailsRes.data)
-        ? emailsRes.data.find((item: any) => item?.primary)?.email ??
+      const verifiedEmail = Array.isArray(emailsRes.data)
+        ? emailsRes.data.find((item: any) => item?.primary && item?.verified)?.email ??
           emailsRes.data.find((item: any) => item?.verified)?.email ??
           null
         : null;
@@ -69,7 +69,7 @@ export class AuthService {
       return {
         id: Number(profileRes.data.id),
         login: String(profileRes.data.login),
-        email: typeof primaryEmail === 'string' ? primaryEmail : null,
+        email: typeof verifiedEmail === 'string' ? verifiedEmail : null,
         name: typeof profileRes.data.name === 'string' ? profileRes.data.name : null,
         avatarUrl: typeof profileRes.data.avatar_url === 'string' ? profileRes.data.avatar_url : null,
       };
@@ -79,7 +79,7 @@ export class AuthService {
   }
 
   private buildSession(user: User) {
-    const payload = { sub: user.id, email: user.email, role: user.role };
+    const payload = { sub: user.id, email: user.email, role: user.role, sv: user.sessionVersion };
     const accessToken = this.jwtService.sign(payload);
 
     return {

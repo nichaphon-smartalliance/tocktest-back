@@ -55,6 +55,9 @@ export class UsersService {
     if (data.email) {
       user = await this.userRepo.findOne({ where: { email: data.email, isActive: true } });
       if (user) {
+        if (user.authProvider === 'local' && !user.githubId) {
+          throw new UnauthorizedException('This email is already registered. Sign in with password before linking GitHub.');
+        }
         user.githubId = data.githubId;
         user.githubLogin = data.githubLogin;
         if (data.avatarUrl) user.avatarUrl = data.avatarUrl;
@@ -122,7 +125,8 @@ export class UsersService {
     const isValid = await bcrypt.compare(dto.currentPassword, hash);
     if (!isValid) throw new UnauthorizedException('รหัสผ่านปัจจุบันไม่ถูกต้อง');
 
-    user.passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    user.passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    user.sessionVersion += 1;
     await this.userRepo.save(user);
     return { success: true };
   }
