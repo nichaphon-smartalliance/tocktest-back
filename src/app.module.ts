@@ -33,7 +33,7 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
         database: config.get<string>('DB_NAME', 'tocktest_db'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: false,
-        logging: process.env.NODE_ENV === 'development',
+        logging: config.get<string>('DB_LOGGING', 'false') === 'true',
       }),
     }),
     AuthModule,

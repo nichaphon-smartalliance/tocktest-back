@@ -1,14 +1,17 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { json, urlencoded } from 'express';
+import { json, NextFunction, Request, Response, urlencoded } from 'express';
+import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  app.set('trust proxy', 1);
   const dataSource = app.get(DataSource);
   await ensureGithubTokenExpiresAt(dataSource);
   await ensureBackgroundJobsTable(dataSource);
@@ -25,6 +28,7 @@ async function bootstrap() {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     next();
   });
+  app.use(requestContextLogger);
 
   const corsOrigins = resolveCorsOrigins();
   app.enableCors({
@@ -51,6 +55,30 @@ async function bootstrap() {
   const port = process.env.PORT || 4004;
   await app.listen(port);
   console.log(`TockTest Backend running on http://localhost:${port}`);
+}
+
+function requestContextLogger(req: Request, res: Response, next: NextFunction) {
+  const startedAt = Date.now();
+  const incomingId = req.header('x-request-id');
+  const requestId = incomingId && incomingId.length <= 128 ? incomingId : randomUUID();
+
+  res.setHeader('X-Request-ID', requestId);
+  res.on('finish', () => {
+    const entry = {
+      level: res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
+      event: 'http_request',
+      requestId,
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? null,
+    };
+    console.log(JSON.stringify(entry));
+  });
+
+  next();
 }
 
 function resolveCorsOrigins(): string[] {

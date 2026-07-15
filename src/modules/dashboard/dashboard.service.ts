@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository as TypeOrmRepo, In } from 'typeorm';
+import { Repository as TypeOrmRepo } from 'typeorm';
 import { Repository } from '../repositories/entities/repository.entity';
 import { TestCase } from '../test-cases/entities/test-case.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
@@ -27,19 +27,7 @@ export class DashboardService {
     ]);
 
     const recentRepos = ownRepos;
-    const ownFullNames = ownRepos.map((r) => r.fullName);
-
-    // Expand to all accounts' copies of the same GitHub repos (matched by full_name)
-    const allSharedRepos = ownFullNames.length > 0
-      ? await this.repoRepo.find({ where: { fullName: In(ownFullNames) }, select: ['id', 'fullName'] })
-      : [];
-    const allRepoIds = allSharedRepos.map((r) => r.id);
-
-    // Map own repo fullName → all sibling repo IDs (for per-repo stats aggregation)
-    const siblingMap = new Map<string, string[]>(ownRepos.map((r) => [r.fullName, []]));
-    for (const r of allSharedRepos) {
-      siblingMap.get(r.fullName)?.push(r.id);
-    }
+    const ownRepoIds = ownRepos.map((r) => r.id);
 
     if (ownRepos.length === 0) {
       const capabilities = this.buildCapabilities({
@@ -68,13 +56,17 @@ export class DashboardService {
         .createQueryBuilder('tc')
         .select('tc.status', 'status')
         .addSelect('COUNT(*)', 'count')
-        .where('tc.repo_id IN (:...ids)', { ids: allRepoIds })
+        .where('tc.repo_id IN (:...ids)', { ids: ownRepoIds })
         .groupBy('tc.status')
         .getRawMany<{ status: string; count: string }>(),
-      this.tcRepo.count({ where: { repoId: In(allRepoIds), isAiGenerated: true } }),
       this.tcRepo
         .createQueryBuilder('tc')
-        .where('tc.repo_id IN (:...ids)', { ids: allRepoIds })
+        .where('tc.repo_id IN (:...repoIds)', { repoIds: ownRepoIds })
+        .andWhere('tc.is_ai_generated = :isAiGenerated', { isAiGenerated: true })
+        .getCount(),
+      this.tcRepo
+        .createQueryBuilder('tc')
+        .where('tc.repo_id IN (:...ids)', { ids: ownRepoIds })
         .andWhere('tc.status = :status', { status: 'fail' })
         .andWhere('tc.priority IN (:...priorities)', { priorities: ['high', 'critical'] })
         .getCount(),
@@ -86,7 +78,7 @@ export class DashboardService {
         .addSelect("SUM(CASE WHEN tc.status = 'fail' THEN 1 ELSE 0 END)", 'failCount')
         .addSelect("SUM(CASE WHEN tc.status = 'blocked' THEN 1 ELSE 0 END)", 'blockedCount')
         .addSelect("SUM(CASE WHEN tc.status = 'not_tested' THEN 1 ELSE 0 END)", 'notTestedCount')
-        .where('tc.repo_id IN (:...repoIds)', { repoIds: allRepoIds })
+        .where('tc.repo_id IN (:...repoIds)', { repoIds: ownRepoIds })
         .groupBy('tc.repo_id')
         .getRawMany<{ repoId: string; total: string; passCount: string; failCount: string; blockedCount: string; notTestedCount: string }>(),
     ]);
@@ -114,17 +106,6 @@ export class DashboardService {
       ]),
     );
 
-    // Aggregate sibling stats under each own repo's fullName
-    const statsForFullName = new Map<string, { total: number; passCount: number; failCount: number; blockedCount: number; notTestedCount: number }>();
-    for (const [fullName, siblingIds] of siblingMap) {
-      let total = 0, passCount = 0, failCount = 0, blockedCount = 0, notTestedCount = 0;
-      for (const id of siblingIds) {
-        const s = perRepoById.get(id);
-        if (s) { total += s.total; passCount += s.passCount; failCount += s.failCount; blockedCount += s.blockedCount; notTestedCount += s.notTestedCount; }
-      }
-      statsForFullName.set(fullName, { total, passCount, failCount, blockedCount, notTestedCount });
-    }
-
     const executed = byStatus.pass + byStatus.fail + byStatus.blocked;
     const passRate = executed > 0 ? Math.round((byStatus.pass / executed) * 100) : 0;
     const capabilities = this.buildCapabilities({
@@ -145,7 +126,7 @@ export class DashboardService {
       capabilities,
       nextMilestones: this.buildNextMilestones(capabilities),
       recentRepos: recentRepos.map((r) => {
-        const stats = statsForFullName.get(r.fullName);
+        const stats = perRepoById.get(r.id);
         return {
           id: r.id,
           fullName: r.fullName,

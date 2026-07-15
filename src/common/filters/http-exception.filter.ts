@@ -23,8 +23,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
         typeof res === 'string'
           ? res
           : (res as any).message ?? exception.message;
-    } else if (exception instanceof Error) {
-      message = exception.message;
+    }
+
+    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+      message = 'Too many requests';
+    } else if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      message = 'Internal server error';
     }
 
     response
