@@ -9,6 +9,11 @@ import type { GithubLoginDto } from './dto/github-login.dto';
 
 @Injectable()
 export class AuthService {
+  // A constant bcrypt hash compared against when the account doesn't exist, so
+  // login response time is the same whether or not the email is registered
+  // (defeats timing-based user enumeration).
+  private static readonly DUMMY_HASH = bcrypt.hashSync('tocktest-timing-equalizer', 12);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -16,14 +21,14 @@ export class AuthService {
 
   async login(dto: LoginDto) {
     const user = await this.usersService.findByEmail(dto.email);
-    if (!user || !user.passwordHash) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
 
+    // Always run one bcrypt comparison — even for a missing user — so the
+    // response timing can't reveal whether the email exists.
     // pgcrypto uses $2a$ while bcryptjs expects $2b$ when comparing hashes.
-    const hash = user.passwordHash.replace(/^\$2a\$/, '$2b$');
-    const isValid = await bcrypt.compare(dto.password, hash);
-    if (!isValid) {
+    const hash = user?.passwordHash?.replace(/^\$2a\$/, '$2b$') ?? AuthService.DUMMY_HASH;
+    const passwordOk = await bcrypt.compare(dto.password, hash);
+
+    if (!user || !user.passwordHash || !passwordOk) {
       throw new UnauthorizedException('Invalid email or password');
     }
 

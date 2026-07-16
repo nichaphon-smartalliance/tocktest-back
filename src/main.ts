@@ -12,7 +12,15 @@ import { recordAuthFailure } from './common/security/auth-failure-monitor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
-  app.set('trust proxy', 1);
+  // Number of reverse proxies to trust for X-Forwarded-For — this decides the
+  // client IP used for rate limiting. It MUST match the real deployment or a
+  // client can spoof X-Forwarded-For to forge its source IP and evade per-IP
+  // throttling. Set TRUST_PROXY=0 when the app is directly exposed (e.g. local
+  // dev), or the exact hop count behind load balancers. Defaults to 1 proxy.
+  const trustProxy = process.env.TRUST_PROXY ?? '1';
+  app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy === 'true');
+  // Don't advertise the framework (info-disclosure hardening).
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
   const dataSource = app.get(DataSource);
   await ensureGithubTokenExpiresAt(dataSource);
   await ensureBackgroundJobsTable(dataSource);
