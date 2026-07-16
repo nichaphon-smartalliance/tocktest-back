@@ -26,7 +26,7 @@ export function encrypt(text: string): string {
 export function decrypt(encrypted: string): string {
   if (encrypted.startsWith('v2:')) {
     const [, ivHex, tagHex, encryptedHex] = encrypted.split(':');
-    if (!ivHex || !tagHex || !encryptedHex) {
+    if (!ivHex || !tagHex || encryptedHex === undefined) {
       throw new InternalServerErrorException('Invalid encrypted token format');
     }
 
