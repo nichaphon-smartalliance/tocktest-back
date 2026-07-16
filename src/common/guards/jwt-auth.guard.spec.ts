@@ -4,7 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
-function buildContext(isPublicValue: boolean | undefined) {
+function buildContext() {
   const mockHandler = jest.fn();
   const mockClass = jest.fn();
   return {
@@ -30,7 +30,7 @@ describe('JwtAuthGuard', () => {
       reflector.getAllAndOverride.mockReturnValue(true);
       const spy = jest.spyOn(AuthGuard('jwt').prototype, 'canActivate').mockResolvedValue(true as any);
 
-      const result = await guard.canActivate(buildContext(true));
+      const result = await guard.canActivate(buildContext());
 
       expect(result).toBe(true);
       expect(spy).not.toHaveBeenCalled();
@@ -39,7 +39,7 @@ describe('JwtAuthGuard', () => {
 
     it('checks IS_PUBLIC_KEY with handler and class', () => {
       reflector.getAllAndOverride.mockReturnValue(true);
-      const ctx = buildContext(true);
+      const ctx = buildContext();
       guard.canActivate(ctx);
 
       expect(reflector.getAllAndOverride).toHaveBeenCalledWith(IS_PUBLIC_KEY, [
@@ -52,7 +52,7 @@ describe('JwtAuthGuard', () => {
       reflector.getAllAndOverride.mockReturnValue(false);
       const spy = jest.spyOn(AuthGuard('jwt').prototype, 'canActivate').mockResolvedValue(true as any);
 
-      await guard.canActivate(buildContext(false));
+      await guard.canActivate(buildContext());
 
       expect(spy).toHaveBeenCalled();
       spy.mockRestore();

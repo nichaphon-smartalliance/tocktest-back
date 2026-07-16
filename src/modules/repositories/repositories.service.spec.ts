@@ -1,7 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ILike, Not, In } from 'typeorm';
+import { ILike } from 'typeorm';
+import axios from 'axios';
 import { RepositoriesService } from './repositories.service';
 import { Repository } from './entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
@@ -140,7 +141,6 @@ describe('RepositoriesService — data isolation', () => {
     });
 
     it('deletes only repos belonging to the requesting user when repos exist', async () => {
-      const axios = require('axios');
       const axiosSpy = jest.spyOn(axios, 'get').mockResolvedValue({
         data: [{ id: 99, full_name: 'owner/live', name: 'live', default_branch: 'main', private: false, html_url: '', clone_url: '', owner: { login: 'owner' } }],
       });
@@ -160,7 +160,6 @@ describe('RepositoriesService — data isolation', () => {
     });
 
     it('deletes all repos for the user when GitHub returns empty list', async () => {
-      const axios = require('axios');
       const axiosSpy = jest.spyOn(axios, 'get').mockResolvedValue({ data: [] });
       githubTokensService.getDecryptedToken.mockResolvedValue('ghp_token');
 

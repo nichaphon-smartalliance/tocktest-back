@@ -4,6 +4,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { User } from '../users/entities/user.entity';
 import { GithubAppService } from './github-app.service';
+import { ImportRepositoryDto } from './dto/import-repository.dto';
 
 @Controller('api/v1/github-app')
 export class GithubAppController {
@@ -36,9 +37,9 @@ export class GithubAppController {
   importInstallationRepository(
     @CurrentUser() user: User,
     @Param('installationId') installationId: string,
-    @Body('fullName') fullName: string,
+    @Body() dto: ImportRepositoryDto,
   ) {
-    return this.githubAppService.importInstallationRepository(user.id, installationId, fullName);
+    return this.githubAppService.importInstallationRepository(user.id, installationId, dto.fullName);
   }
 
   @Public()

@@ -59,7 +59,7 @@ describe('buildPrReviewInput', () => {
   });
 
   it('treats missing files as empty array', () => {
-    const { files: _f, ...prWithoutFiles } = basePr;
+    const prWithoutFiles = { ...basePr, files: undefined };
     const parsed = JSON.parse(buildPrReviewInput(prWithoutFiles));
     expect(parsed.files).toEqual([]);
   });

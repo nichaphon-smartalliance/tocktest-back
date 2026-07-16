@@ -6,6 +6,7 @@ import axios from 'axios';
 import * as jwt from 'jsonwebtoken';
 import { GithubInstallation } from './entities/github-installation.entity';
 import { Repository } from '../repositories/entities/repository.entity';
+import { isValidRepoFullName } from '../../common/utils/github.util';
 
 @Injectable()
 export class GithubAppService {
@@ -85,6 +86,13 @@ export class GithubAppService {
   }
 
   async importInstallationRepository(userId: string, installationId: string, fullName: string) {
+    // Defense-in-depth: fullName is interpolated into the GitHub API URL below,
+    // so reject anything that isn't a plain "owner/repo" slug (blocks path
+    // traversal / query injection even if a caller bypasses the DTO validation).
+    if (!isValidRepoFullName(fullName)) {
+      throw new BadRequestException('Invalid repository name');
+    }
+
     const installation = await this.installationRepo.findOne({ where: { userId, installationId } });
     if (!installation) {
       throw new BadRequestException('ไม่พบ GitHub App installation นี้สำหรับผู้ใช้นี้');
