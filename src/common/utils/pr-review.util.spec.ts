@@ -6,7 +6,7 @@ describe('buildPrReviewInput', () => {
     title: 'Fix auth bug',
     state: 'open',
     body: 'Fixes #100',
-    head: { ref: 'feature/auth-fix' },
+    head: { ref: 'feature/auth-fix', sha: 'abc123def456' },
     base: { ref: 'main' },
     changed_files: 3,
     additions: 50,

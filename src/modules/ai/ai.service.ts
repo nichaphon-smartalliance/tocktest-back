@@ -6,6 +6,8 @@ import axios from 'axios';
 import { Repository } from '../repositories/entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
 import { RepoSettings } from '../settings/entities/repo-settings.entity';
+import { GithubApiClient } from '../../common/github/github-api.client';
+import { GithubCommit, GithubCommitStatusState, GithubPullRequest } from '../../common/github/github-api.types';
 import {
   buildTestGenerationPrompt,
   buildCommitAnalysisPrompt,
@@ -15,6 +17,7 @@ import {
 } from './prompts';
 import { normalizePriority, normalizeRiskLevel, normalizeTestType } from '../../common/utils/normalize-ai';
 import { heuristicAnalyzeCommit, heuristicWhatToTest, heuristicChat } from '../../common/utils/heuristic-ai';
+import { getErrorMessage } from '../../common/utils/error.util';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -25,6 +28,16 @@ interface AiExecutionOptions {
   forceOffline?: boolean;
   repoId?: string;
   language?: 'th' | 'en';
+}
+
+interface GeneratedTestCase {
+  title?: string;
+  description?: string;
+  steps?: unknown;
+  expectedResult?: string;
+  testType?: string;
+  priority?: string;
+  tags?: unknown;
 }
 
 @Injectable()
@@ -40,6 +53,7 @@ export class AiService {
     @InjectRepository(RepoSettings)
     private readonly repoSettingsRepo: TypeOrmRepo<RepoSettings>,
     private readonly githubTokensService: GithubTokensService,
+    private readonly githubApi: GithubApiClient,
   ) { }
 
   private get apiUrl(): string {
@@ -102,8 +116,8 @@ export class AiService {
         '';
       this.logger.debug(`AI response length: ${content.length} chars`);
       return content;
-    } catch (err: any) {
-      this.logger.error(`AI API call failed: ${err.message}`);
+    } catch (err: unknown) {
+      this.logger.error(`AI API call failed: ${getErrorMessage(err)}`);
     }
     // Heuristic fallback — uses real repo data from context, no external AI needed
     this.logger.warn('AI offline — using heuristic chat');
@@ -123,9 +137,9 @@ export class AiService {
       const content = res.data?.choices?.[0]?.message?.content ?? '';
       this.logger.debug(`OpenAI response length: ${content.length} chars`);
       return content;
-    } catch (err: any) {
-      const status = err.response?.status;
-      const detail = err.response?.data?.error?.message ?? err.message;
+    } catch (err: unknown) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+      const detail = axios.isAxiosError(err) ? err.response?.data?.error?.message ?? err.message : getErrorMessage(err);
       this.logger.error(`OpenAI API call failed [${status}]: ${detail}`);
       if (status === 401) throw new ServiceUnavailableException('OpenAI API key invalid');
       if (status === 429) throw new ServiceUnavailableException('OpenAI rate limit exceeded');
@@ -161,7 +175,7 @@ export class AiService {
       throw new InternalServerErrorException('ไม่พบ commit ที่สามารถวิเคราะห์ได้ในช่วงเวลาที่เลือก');
     }
     const projectContext = await this.fetchProjectContext(repo.fullName, pat);
-    const mapTestCases = (parsed: any[]) =>
+    const mapTestCases = (parsed: GeneratedTestCase[]) =>
       parsed.map((tc) => ({
         title: tc.title ?? '',
         description: tc.description ?? null,
@@ -177,7 +191,7 @@ export class AiService {
 
     const prompt = buildTestGenerationPrompt(diffs, projectContext || undefined);
     const response = await this.chat([{ role: 'user', content: prompt }], { repoId });
-    const parsed = this.parseJson<any[]>(response) ?? [];
+    const parsed = this.parseJson<GeneratedTestCase[]>(response) ?? [];
     if (parsed.length === 0) {
       throw new InternalServerErrorException('AI ไม่สามารถสร้าง test case ได้ กรุณาลองใหม่');
     }
@@ -194,17 +208,9 @@ export class AiService {
     const files = ['CLAUDE.md', 'README.md'];
     const results = await Promise.all(
       files.map(async (file) => {
-        try {
-          const res = await axios.get(
-            `https://api.github.com/repos/${fullName}/contents/${file}`,
-            { headers: { Authorization: `token ${pat}` }, timeout: 5000 },
-          );
-          const content = Buffer.from(res.data.content, 'base64').toString('utf-8');
-          return `--- ${file} ---\n${content.slice(0, 3000)}`;
-        } catch {
-          // file not found or inaccessible — skip silently
-          return null;
-        }
+        const content = await this.githubApi.getFileText(fullName, file, pat);
+        if (content === null) return null;
+        return `--- ${file} ---\n${content.slice(0, 3000)}`;
       }),
     );
     return results.filter(Boolean).join('\n\n');
@@ -320,6 +326,9 @@ export class AiService {
   }
 
   // ── GitHub helpers ────────────────────────────────────────────────────
+  // Thin pass-throughs to GithubApiClient — kept here (rather than called
+  // directly by other modules) because callers already depend on AiService
+  // and this avoids churning their constructors.
 
   async fetchCommitDiffs(fullName: string, pat: string, params: {
     fromDate?: string;
@@ -330,32 +339,24 @@ export class AiService {
     try {
       let shas = params.commitShas ?? [];
       if (!shas.length) {
-        const query: Record<string, unknown> = {
+        const commits = await this.githubApi.listCommits(fullName, pat, {
           since: params.fromDate,
           until: params.toDate,
+          sha: params.branch,
           per_page: 10,
-        };
-        if (params.branch) query.sha = params.branch;
-        const res = await axios.get(`https://api.github.com/repos/${fullName}/commits`, {
-          headers: { Authorization: `token ${pat}` },
-          params: query,
-          timeout: 10000,
         });
-        shas = res.data.map((c: any) => c.sha);
+        shas = commits.map((c) => c.sha);
       }
 
       const diffs = await Promise.all(
         shas.slice(0, 5).map(async (sha: string) => {
-          const res = await axios.get(
-            `https://api.github.com/repos/${fullName}/commits/${sha}`,
-            { headers: { Authorization: `token ${pat}`, Accept: 'application/vnd.github.v3.diff' }, timeout: 10000 },
-          );
-          return `--- Commit ${sha} ---\n${res.data}`;
+          const diff = await this.githubApi.getCommitDiff(fullName, sha, pat);
+          return `--- Commit ${sha} ---\n${diff}`;
         }),
       );
       return diffs.join('\n\n').slice(0, 20000);
-    } catch (err: any) {
-      this.logger.warn(`fetchCommitDiffs error: ${err.message}`);
+    } catch (err: unknown) {
+      this.logger.warn(`fetchCommitDiffs error: ${getErrorMessage(err)}`);
       return null;
     }
   }
@@ -366,61 +367,36 @@ export class AiService {
     per_page?: number;
     page?: number;
     branch?: string;
-  }): Promise<any[]> {
-    const query: any = { per_page: params.per_page ?? 30, page: params.page ?? 1, since: params.since, until: params.until };
-    if (params.branch) query.sha = params.branch;
-
-    const res = await axios.get(`https://api.github.com/repos/${fullName}/commits`, {
-      headers: { Authorization: `token ${pat}` },
-      params: query,
+  }): Promise<GithubCommit[]> {
+    return this.githubApi.listCommits(fullName, pat, {
+      since: params.since,
+      until: params.until,
+      per_page: params.per_page ?? 30,
+      page: params.page ?? 1,
+      sha: params.branch,
     });
-    return res.data;
   }
 
-  async fetchCommitDetail(fullName: string, pat: string, sha: string): Promise<any> {
-    const res = await axios.get(`https://api.github.com/repos/${fullName}/commits/${sha}`, {
-      headers: { Authorization: `token ${pat}` },
-    });
-    return res.data;
+  async fetchCommitDetail(fullName: string, pat: string, sha: string): Promise<GithubCommit> {
+    return this.githubApi.getCommit(fullName, sha, pat);
   }
 
   async postIssueComment(fullName: string, token: string, issueNumber: number, body: string): Promise<void> {
-    await axios.post(
-      `https://api.github.com/repos/${fullName}/issues/${issueNumber}/comments`,
-      { body },
-      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } },
-    );
+    await this.githubApi.postIssueComment(fullName, issueNumber, body, token);
   }
 
   async postCommitStatus(
     fullName: string,
     token: string,
     sha: string,
-    state: 'pending' | 'success' | 'failure' | 'error',
+    state: GithubCommitStatusState,
     description: string,
     context = 'tocktest/ai-review',
   ): Promise<void> {
-    await axios.post(
-      `https://api.github.com/repos/${fullName}/statuses/${sha}`,
-      { state, description: description.slice(0, 140), context },
-      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } },
-    );
+    await this.githubApi.postCommitStatus(fullName, sha, state, description, token, context);
   }
 
-  async fetchPullRequestDetail(fullName: string, pat: string, prNumber: number): Promise<any> {
-    const [prRes, filesRes] = await Promise.all([
-      axios.get(`https://api.github.com/repos/${fullName}/pulls/${prNumber}`, {
-        headers: { Authorization: `token ${pat}` },
-      }),
-      axios.get(`https://api.github.com/repos/${fullName}/pulls/${prNumber}/files`, {
-        headers: { Authorization: `token ${pat}` },
-        params: { per_page: 50 },
-      }),
-    ]);
-
-    return {
-      ...prRes.data,
-      files: filesRes.data,
-    };
+  async fetchPullRequestDetail(fullName: string, pat: string, prNumber: number): Promise<GithubPullRequest> {
+    return this.githubApi.getPullRequestDetail(fullName, prNumber, pat);
   }
 }

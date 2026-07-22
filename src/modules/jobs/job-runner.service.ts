@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { JobsService } from './jobs.service';
 import { JobHandlersService } from './job-handlers.service';
+import { getErrorMessage } from '../../common/utils/error.util';
 
 @Injectable()
 export class JobRunnerService implements OnModuleInit, OnModuleDestroy {
@@ -39,8 +40,8 @@ export class JobRunnerService implements OnModuleInit, OnModuleDestroy {
         try {
           await this.handlers.run(job);
           await this.jobs.complete(job.id);
-        } catch (err: any) {
-          await this.jobs.fail(job.id, err?.message ?? String(err), job);
+        } catch (err: unknown) {
+          await this.jobs.fail(job.id, getErrorMessage(err), job);
         }
       }
     } finally {

@@ -14,15 +14,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'Internal server error';
+    let message: string | string[] = 'Internal server error';
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const res = exception.getResponse();
-      message =
-        typeof res === 'string'
-          ? res
-          : (res as any).message ?? exception.message;
+      if (typeof res === 'string') {
+        message = res;
+      } else if (res && typeof res === 'object' && 'message' in res) {
+        message = (res as { message: string | string[] }).message ?? exception.message;
+      } else {
+        message = exception.message;
+      }
     }
 
     if (status === HttpStatus.TOO_MANY_REQUESTS) {

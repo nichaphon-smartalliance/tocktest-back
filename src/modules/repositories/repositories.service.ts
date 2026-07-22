@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository as TypeOrmRepo, ILike, Not, In } from 'typeorm';
-import axios from 'axios';
+import { Repository as TypeOrmRepo, ILike, Not, In, FindOptionsWhere } from 'typeorm';
 import { Repository } from './entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
+import { GithubApiClient } from '../../common/github/github-api.client';
 import { toPageResult } from '../../common/dto/pagination.dto';
 
 @Injectable()
@@ -12,11 +12,12 @@ export class RepositoriesService {
     @InjectRepository(Repository)
     private readonly repoRepository: TypeOrmRepo<Repository>,
     private readonly githubTokensService: GithubTokensService,
+    private readonly githubApi: GithubApiClient,
   ) {}
 
   async findAll(userId: string, params: { search?: string; page?: number; pageSize?: number }) {
     const { search, page = 1, pageSize = 100 } = params;
-    const where: any = { userId };
+    const where: FindOptionsWhere<Repository> = { userId };
     if (search) where.fullName = ILike(`%${search}%`);
 
     const [items, total] = await this.repoRepository.findAndCount({
@@ -92,37 +93,16 @@ export class RepositoriesService {
     return { synced: rows.length, total: githubRepos.length };
   }
 
-  async getBranches(userId: string, repoId: string): Promise<any[]> {
+  async getBranches(userId: string, repoId: string): Promise<{ name: string; commitSha: string }[]> {
     const repo = await this.findOneForUser(userId, repoId);
     const pat = await this.githubTokensService.getDecryptedToken(userId);
     if (!pat) throw new NotFoundException('ไม่พบ GitHub Token กรุณาเพิ่มก่อน');
 
-    const branches: any[] = [];
-    let branchPage = 1;
-    while (true) {
-      const res = await axios.get(`https://api.github.com/repos/${repo.fullName}/branches`, {
-        headers: { Authorization: `token ${pat}` },
-        params: { per_page: 100, page: branchPage },
-      });
-      branches.push(...res.data);
-      if (res.data.length < 100) break;
-      branchPage++;
-    }
-    return branches.map((b: any) => ({ name: b.name, commitSha: b.commit?.sha }));
+    const branches = await this.githubApi.listAllBranches(repo.fullName, pat);
+    return branches.map((b) => ({ name: b.name, commitSha: b.commit?.sha }));
   }
 
-  private async fetchGithubRepos(pat: string): Promise<any[]> {
-    const repos: any[] = [];
-    let page = 1;
-    while (true) {
-      const res = await axios.get('https://api.github.com/user/repos', {
-        headers: { Authorization: `token ${pat}` },
-        params: { per_page: 100, page, sort: 'updated', type: 'owner' },
-      });
-      repos.push(...res.data);
-      if (res.data.length < 100) break;
-      page++;
-    }
-    return repos;
+  private async fetchGithubRepos(pat: string) {
+    return this.githubApi.listAllUserRepos(pat, 'owner');
   }
 }

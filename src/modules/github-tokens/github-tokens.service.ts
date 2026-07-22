@@ -8,6 +8,7 @@ import { GithubToken } from './entities/github-token.entity';
 import { encrypt, decrypt } from '../../common/utils/encryption.util';
 import type { CreateGithubTokenDto } from './dto/create-github-token.dto';
 import { Repository as AppRepository } from '../repositories/entities/repository.entity';
+import { GithubApiClient } from '../../common/github/github-api.client';
 
 @Injectable()
 export class GithubTokensService {
@@ -17,6 +18,7 @@ export class GithubTokensService {
     @InjectRepository(AppRepository)
     private readonly repoRepo: Repository<AppRepository>,
     private readonly config: ConfigService,
+    private readonly githubApi: GithubApiClient,
   ) {}
 
   async findAll(userId: string) {
@@ -55,9 +57,7 @@ export class GithubTokensService {
 
     try {
       const pat = decrypt(token.tokenEncrypted);
-      await axios.get('https://api.github.com/user', {
-        headers: { Authorization: `token ${pat}` },
-      });
+      await this.githubApi.getUser(pat);
       await this.tokenRepo.update(tokenId, { lastTestedAt: new Date() });
       return { valid: true };
     } catch {
@@ -133,10 +133,7 @@ export class GithubTokensService {
       throw new UnauthorizedException('Could not obtain an access token from GitHub.');
     }
 
-    const userRes = await axios.get('https://api.github.com/user', {
-      headers: { Authorization: `token ${accessToken}` },
-    });
-    const ghUser = userRes.data;
+    const ghUser = await this.githubApi.getUser(accessToken);
     const scopes = (tokenRes.data?.scope ?? '')
       .split(',')
       .map((s: string) => s.trim())
@@ -175,18 +172,9 @@ export class GithubTokensService {
   }
 
   private async syncRepositoriesFromOauth(userId: string, accessToken: string) {
-    const repos: any[] = [];
-    let page = 1;
-
-    while (true) {
-      const res = await axios.get('https://api.github.com/user/repos', {
-        headers: { Authorization: `token ${accessToken}` },
-        params: { per_page: 100, page, sort: 'updated' },
-      });
-      repos.push(...res.data);
-      if (res.data.length < 100) break;
-      page++;
-    }
+    // No `type` filter here (unlike the PAT sync path) — OAuth login intentionally
+    // pulls in every repo the token can see, not just ones the user owns.
+    const repos = await this.githubApi.listAllUserRepos(accessToken);
 
     const now = new Date();
     const rows = repos.map((gr) => ({

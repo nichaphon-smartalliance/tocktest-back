@@ -32,6 +32,8 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
         password: config.getOrThrow<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME', 'tocktest_db'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
+        migrationsRun: true,
         synchronize: false,
         logging: config.get<string>('DB_LOGGING', 'false') === 'true',
       }),

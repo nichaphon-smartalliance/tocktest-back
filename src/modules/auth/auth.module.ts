@@ -7,10 +7,12 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
+import { GithubApiModule } from '../../common/github/github-api.module';
 
 @Module({
   imports: [
     UsersModule,
+    GithubApiModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

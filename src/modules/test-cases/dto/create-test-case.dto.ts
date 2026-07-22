@@ -5,6 +5,11 @@ import {
   IsArray,
   IsIn,
   IsBoolean,
+  IsInt,
+  IsObject,
+  Min,
+  MaxLength,
+  ArrayMaxSize,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -12,6 +17,16 @@ import { Type } from 'class-transformer';
 const TEST_TYPES = ['manual', 'automated', 'ui', 'api', 'integration'] as const;
 const TEST_STATUSES = ['pass', 'fail', 'blocked', 'not_tested'] as const;
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
+
+export class TestStepDto {
+  @IsInt()
+  @Min(0)
+  order: number;
+
+  @IsString()
+  @MaxLength(2000)
+  description: string;
+}
 
 export class CreateTestCaseDto {
   @IsString()
@@ -22,7 +37,11 @@ export class CreateTestCaseDto {
   description?: string;
 
   @IsOptional()
-  steps?: { order: number; description: string }[];
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => TestStepDto)
+  steps?: TestStepDto[];
 
   @IsOptional()
   @IsString()
@@ -54,6 +73,7 @@ export class CreateTestCaseDto {
   isAiGenerated?: boolean;
 
   @IsOptional()
+  @IsObject()
   aiGenerationMetadata?: Record<string, unknown>;
 }
 
@@ -67,7 +87,11 @@ export class UpdateTestCaseDto {
   description?: string;
 
   @IsOptional()
-  steps?: { order: number; description: string }[];
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => TestStepDto)
+  steps?: TestStepDto[];
 
   @IsOptional()
   @IsString()
@@ -99,6 +123,7 @@ export class UpdateTestCaseDto {
   isAiGenerated?: boolean;
 
   @IsOptional()
+  @IsObject()
   aiGenerationMetadata?: Record<string, unknown>;
 }
 

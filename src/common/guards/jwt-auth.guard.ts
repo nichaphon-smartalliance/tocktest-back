@@ -6,6 +6,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import type { User } from '../../modules/users/entities/user.entity';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -22,7 +23,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any) {
+  handleRequest<TUser = User>(err: unknown, user: TUser | null | undefined | false): TUser {
     if (err || !user) {
       throw err ?? new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
     }

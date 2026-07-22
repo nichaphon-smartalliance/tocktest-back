@@ -1,11 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import axios from 'axios';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import type { User } from '../users/entities/user.entity';
 import type { LoginDto } from './dto/login.dto';
 import type { GithubLoginDto } from './dto/github-login.dto';
+import { GithubApiClient } from '../../common/github/github-api.client';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +17,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly githubApi: GithubApiClient,
   ) {}
 
   async login(dto: LoginDto) {
@@ -52,31 +53,26 @@ export class AuthService {
 
   private async fetchGithubProfile(accessToken: string) {
     try {
-      const headers = {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/vnd.github+json',
-      };
-      const [profileRes, emailsRes] = await Promise.all([
-        axios.get('https://api.github.com/user', { headers, timeout: 10000 }),
-        axios.get('https://api.github.com/user/emails', { headers, timeout: 10000 }),
+      const [profile, emails] = await Promise.all([
+        this.githubApi.getUser(accessToken),
+        this.githubApi.getUserEmails(accessToken),
       ]);
 
-      const verifiedEmail = Array.isArray(emailsRes.data)
-        ? emailsRes.data.find((item: any) => item?.primary && item?.verified)?.email ??
-          emailsRes.data.find((item: any) => item?.verified)?.email ??
-          null
-        : null;
+      const verifiedEmail =
+        emails.find((item) => item?.primary && item?.verified)?.email ??
+        emails.find((item) => item?.verified)?.email ??
+        null;
 
-      if (!profileRes.data?.id || !profileRes.data?.login) {
+      if (!profile?.id || !profile?.login) {
         throw new UnauthorizedException('Invalid GitHub profile');
       }
 
       return {
-        id: Number(profileRes.data.id),
-        login: String(profileRes.data.login),
+        id: Number(profile.id),
+        login: String(profile.login),
         email: typeof verifiedEmail === 'string' ? verifiedEmail : null,
-        name: typeof profileRes.data.name === 'string' ? profileRes.data.name : null,
-        avatarUrl: typeof profileRes.data.avatar_url === 'string' ? profileRes.data.avatar_url : null,
+        name: typeof profile.name === 'string' ? profile.name : null,
+        avatarUrl: typeof profile.avatar_url === 'string' ? profile.avatar_url : null,
       };
     } catch {
       throw new UnauthorizedException('GitHub authentication failed');

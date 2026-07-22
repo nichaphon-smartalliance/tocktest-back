@@ -47,12 +47,12 @@ export class AnalysisService {
 
       const storedAnalyses = commits.length
         ? await this.commitRepo.find({
-            where: { repoId, commitSha: In(commits.map((c: any) => c.sha)) },
+            where: { repoId, commitSha: In(commits.map((c) => c.sha)) },
           })
         : [];
       const analysisBySha = new Map(storedAnalyses.map((item) => [item.commitSha, item]));
 
-      const items = commits.map((c: any) => {
+      const items = commits.map((c) => {
         const stored = analysisBySha.get(c.sha);
         return {
           id: stored?.id ?? c.sha,
@@ -97,7 +97,7 @@ export class AnalysisService {
       message: commitDetail.commit?.message,
       author: commitDetail.commit?.author,
       stats: commitDetail.stats,
-      files: commitDetail.files?.slice(0, 10).map((f: any) => ({
+      files: commitDetail.files?.slice(0, 10).map((f) => ({
         filename: f.filename,
         additions: f.additions,
         deletions: f.deletions,

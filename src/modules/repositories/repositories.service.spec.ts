@@ -2,10 +2,10 @@ import { Test } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ILike } from 'typeorm';
-import axios from 'axios';
 import { RepositoriesService } from './repositories.service';
 import { Repository } from './entities/repository.entity';
 import { GithubTokensService } from '../github-tokens/github-tokens.service';
+import { GithubApiClient } from '../../common/github/github-api.client';
 
 const mockRepo = (overrides = {}): Partial<Repository> => ({
   id: 'repo-1',
@@ -25,6 +25,7 @@ describe('RepositoriesService — data isolation', () => {
     upsert: jest.Mock;
   };
   let githubTokensService: { getDecryptedToken: jest.Mock };
+  let githubApi: { listAllUserRepos: jest.Mock; listAllBranches: jest.Mock };
 
   beforeEach(async () => {
     typeormRepo = {
@@ -34,12 +35,14 @@ describe('RepositoriesService — data isolation', () => {
       upsert: jest.fn().mockResolvedValue({}),
     };
     githubTokensService = { getDecryptedToken: jest.fn() };
+    githubApi = { listAllUserRepos: jest.fn().mockResolvedValue([]), listAllBranches: jest.fn().mockResolvedValue([]) };
 
     const module = await Test.createTestingModule({
       providers: [
         RepositoriesService,
         { provide: getRepositoryToken(Repository), useValue: typeormRepo },
         { provide: GithubTokensService, useValue: githubTokensService },
+        { provide: GithubApiClient, useValue: githubApi },
       ],
     }).compile();
 
@@ -141,9 +144,9 @@ describe('RepositoriesService — data isolation', () => {
     });
 
     it('deletes only repos belonging to the requesting user when repos exist', async () => {
-      const axiosSpy = jest.spyOn(axios, 'get').mockResolvedValue({
-        data: [{ id: 99, full_name: 'owner/live', name: 'live', default_branch: 'main', private: false, html_url: '', clone_url: '', owner: { login: 'owner' } }],
-      });
+      githubApi.listAllUserRepos.mockResolvedValue([
+        { id: 99, full_name: 'owner/live', name: 'live', default_branch: 'main', private: false, html_url: '', clone_url: '', owner: { login: 'owner' } },
+      ]);
       githubTokensService.getDecryptedToken.mockResolvedValue('ghp_token');
 
       await service.syncFromGithub('user-a');
@@ -155,18 +158,15 @@ describe('RepositoriesService — data isolation', () => {
 
       const deleteCall = typeormRepo.delete.mock.calls[0][0];
       expect(deleteCall.userId).toBe('user-a');
-
-      axiosSpy.mockRestore();
     });
 
     it('deletes all repos for the user when GitHub returns empty list', async () => {
-      const axiosSpy = jest.spyOn(axios, 'get').mockResolvedValue({ data: [] });
+      githubApi.listAllUserRepos.mockResolvedValue([]);
       githubTokensService.getDecryptedToken.mockResolvedValue('ghp_token');
 
       await service.syncFromGithub('user-a');
 
       expect(typeormRepo.delete).toHaveBeenCalledWith({ userId: 'user-a' });
-      axiosSpy.mockRestore();
     });
   });
 });

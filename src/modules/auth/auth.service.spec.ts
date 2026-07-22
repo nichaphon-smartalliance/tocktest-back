@@ -5,6 +5,7 @@ import * as bcrypt from 'bcryptjs';
 import axios from 'axios';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { GithubApiClient } from '../../common/github/github-api.client';
 
 const baseUser = {
   id: 'u1',
@@ -37,6 +38,9 @@ describe('AuthService', () => {
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
+        // Real instance (no deps of its own) — tests below still intercept its
+        // underlying axios.get calls via jest.spyOn(axios, 'get').
+        GithubApiClient,
       ],
     }).compile();
 

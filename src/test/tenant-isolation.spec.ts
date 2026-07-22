@@ -49,8 +49,9 @@ describe('Tenant isolation (two-user IDOR)', () => {
     // A single repository row owned by User A.
     const repoTable = makeTable([{ id: REPO_A, userId: USER_A, defaultBranch: 'main', fullName: 'a/repo' }]);
     const githubTokens = { getDecryptedToken: jest.fn().mockResolvedValue(null) };
+    const githubApi = { listAllUserRepos: jest.fn(), listAllBranches: jest.fn() };
 
-    repoService = new RepositoriesService(repoTable as any, githubTokens as any);
+    repoService = new RepositoriesService(repoTable as any, githubTokens as any, githubApi as any);
 
     const folderTable = makeTable([]);
     const tcTable = makeTable([]);
@@ -60,7 +61,14 @@ describe('Tenant isolation (two-user IDOR)', () => {
 
     testCases = new TestCasesService(tcTable as any, folderTable as any, repoService);
     settings = new SettingsService(settingsTable as any, repoService);
-    docs = new DocsService(docTable as any, settingsTable as any, repoService, githubTokens as any, users as any);
+    const docsSource = {
+      fetchBranchHead: jest.fn(),
+      fetchRepoTree: jest.fn(),
+      fetchChangedPaths: jest.fn(),
+      fetchFileContent: jest.fn(),
+      describeGenerationError: jest.fn(),
+    };
+    docs = new DocsService(docTable as any, settingsTable as any, repoService, githubTokens as any, users as any, docsSource as any);
   });
 
   describe('the owner (User A) can reach their repo', () => {

@@ -4,9 +4,10 @@ import { Repository } from './entities/repository.entity';
 import { RepositoriesController } from './repositories.controller';
 import { RepositoriesService } from './repositories.service';
 import { GithubTokensModule } from '../github-tokens/github-tokens.module';
+import { GithubApiModule } from '../../common/github/github-api.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Repository]), GithubTokensModule],
+  imports: [TypeOrmModule.forFeature([Repository]), GithubTokensModule, GithubApiModule],
   controllers: [RepositoriesController],
   providers: [RepositoriesService],
   exports: [RepositoriesService],

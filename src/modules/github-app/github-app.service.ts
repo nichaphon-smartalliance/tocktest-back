@@ -7,6 +7,14 @@ import * as jwt from 'jsonwebtoken';
 import { GithubInstallation } from './entities/github-installation.entity';
 import { Repository } from '../repositories/entities/repository.entity';
 import { isValidRepoFullName } from '../../common/utils/github.util';
+import { GithubApiClient, GITHUB_API_BASE, GITHUB_DEFAULT_TIMEOUT_MS } from '../../common/github/github-api.client';
+import { GithubRepo } from '../../common/github/github-api.types';
+import { getErrorMessage } from '../../common/utils/error.util';
+
+interface GithubInstallationInfo {
+  account?: { login?: string; type?: string };
+  repository_selection?: string;
+}
 
 @Injectable()
 export class GithubAppService {
@@ -18,6 +26,7 @@ export class GithubAppService {
     private readonly installationRepo: TypeOrmRepo<GithubInstallation>,
     @InjectRepository(Repository)
     private readonly repoRepo: TypeOrmRepo<Repository>,
+    private readonly githubApi: GithubApiClient,
   ) {}
 
   getSetupStatus() {
@@ -64,12 +73,7 @@ export class GithubAppService {
     }
 
     const token = await this.getInstallationToken(installationId);
-    const res = await axios.get('https://api.github.com/installation/repositories', {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
-      params: { per_page: 100 },
-    });
-
-    const githubRepos: any[] = res.data?.repositories ?? [];
+    const githubRepos = await this.githubApi.listInstallationRepositories(token);
     const tracked = await this.repoRepo.find({ where: { installationId } });
     const trackedByFullName = new Map(tracked.map((r) => [r.fullName, r]));
 
@@ -99,10 +103,7 @@ export class GithubAppService {
     }
 
     const token = await this.getInstallationToken(installationId);
-    const res = await axios.get(`https://api.github.com/repos/${fullName}`, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
-    });
-    const gr = res.data;
+    const gr = await this.githubApi.getRepo(fullName, token);
 
     await this.repoRepo.upsert(
       {
@@ -145,11 +146,11 @@ export class GithubAppService {
     }
 
     if (userId && installationId && setupAction !== 'request') {
-      let info: any = null;
+      let info: GithubInstallationInfo | null = null;
       try {
         info = await this.fetchInstallationInfo(installationId);
-      } catch (err) {
-        this.logger.warn(`Could not fetch installation info for ${installationId}: ${err?.message ?? err}`);
+      } catch (err: unknown) {
+        this.logger.warn(`Could not fetch installation info for ${installationId}: ${getErrorMessage(err)}`);
       }
 
       await this.installationRepo.upsert(
@@ -180,31 +181,31 @@ export class GithubAppService {
     return jwt.sign({ iat: now - 60, exp: now + 540, iss: appId }, privateKey, { algorithm: 'RS256' });
   }
 
-  private async fetchInstallationInfo(installationId: string) {
+  // GitHub App JWT auth (Bearer <app JWT>) is a different scheme from the
+  // token-authenticated REST calls in GithubApiClient, so these two stay on
+  // raw axios — but share the client's base URL/timeout constants.
+  private async fetchInstallationInfo(installationId: string): Promise<GithubInstallationInfo> {
     const appJwt = this.generateAppJwt();
-    const res = await axios.get(`https://api.github.com/app/installations/${installationId}`, {
+    const res = await axios.get<GithubInstallationInfo>(`${GITHUB_API_BASE}/app/installations/${installationId}`, {
       headers: { Authorization: `Bearer ${appJwt}`, Accept: 'application/vnd.github+json' },
+      timeout: GITHUB_DEFAULT_TIMEOUT_MS,
     });
     return res.data;
   }
 
   async getInstallationToken(installationId: string): Promise<string> {
     const appJwt = this.generateAppJwt();
-    const res = await axios.post(
-      `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    const res = await axios.post<{ token: string }>(
+      `${GITHUB_API_BASE}/app/installations/${installationId}/access_tokens`,
       {},
-      { headers: { Authorization: `Bearer ${appJwt}`, Accept: 'application/vnd.github+json' } },
+      { headers: { Authorization: `Bearer ${appJwt}`, Accept: 'application/vnd.github+json' }, timeout: GITHUB_DEFAULT_TIMEOUT_MS },
     );
     return res.data.token;
   }
 
   async postIssueComment(installationId: string, repoFullName: string, issueNumber: number, body: string) {
     const token = await this.getInstallationToken(installationId);
-    await axios.post(
-      `https://api.github.com/repos/${repoFullName}/issues/${issueNumber}/comments`,
-      { body },
-      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } },
-    );
+    await this.githubApi.postIssueComment(repoFullName, issueNumber, body, token);
   }
 
   async postCommitStatus(
@@ -216,10 +217,6 @@ export class GithubAppService {
     context = 'tocktest/qa',
   ) {
     const token = await this.getInstallationToken(installationId);
-    await axios.post(
-      `https://api.github.com/repos/${repoFullName}/statuses/${sha}`,
-      { state, description, context },
-      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } },
-    );
+    await this.githubApi.postCommitStatus(repoFullName, sha, state, description, token, context);
   }
 }

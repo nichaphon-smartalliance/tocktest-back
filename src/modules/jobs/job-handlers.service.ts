@@ -52,7 +52,7 @@ export class JobHandlersService {
       sha: detail.sha,
       message: detail.commit?.message,
       stats: detail.stats,
-      files: detail.files?.slice(0, 10).map((f: any) => ({
+      files: detail.files?.slice(0, 10).map((f) => ({
         filename: f.filename,
         additions: f.additions,
         deletions: f.deletions,

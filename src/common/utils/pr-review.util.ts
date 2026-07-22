@@ -1,4 +1,6 @@
-export function buildPrReviewInput(pullRequest: any): string {
+import { GithubPullRequest } from '../github/github-api.types';
+
+export function buildPrReviewInput(pullRequest: GithubPullRequest): string {
   return JSON.stringify(
     {
       number: pullRequest.number,
@@ -10,7 +12,7 @@ export function buildPrReviewInput(pullRequest: any): string {
       changedFiles: pullRequest.changed_files,
       additions: pullRequest.additions,
       deletions: pullRequest.deletions,
-      files: (pullRequest.files ?? []).slice(0, 15).map((file: any) => ({
+      files: (pullRequest.files ?? []).slice(0, 15).map((file) => ({
         filename: file.filename,
         status: file.status,
         additions: file.additions,
