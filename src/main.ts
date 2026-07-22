@@ -9,8 +9,12 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { recordAuthFailure } from './common/security/auth-failure-monitor';
+import { validateSecrets } from './common/security/validate-secrets';
 
 async function bootstrap() {
+  // Fail fast (prod) / warn (dev) on placeholder or weak secrets.
+  validateSecrets();
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   // Number of reverse proxies to trust for X-Forwarded-For — this decides the
   // client IP used for rate limiting. It MUST match the real deployment or a
