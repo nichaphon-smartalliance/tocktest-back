@@ -8,7 +8,6 @@ import { GithubInstallation } from './entities/github-installation.entity';
 import { Repository } from '../repositories/entities/repository.entity';
 import { isValidRepoFullName } from '../../common/utils/github.util';
 import { GithubApiClient, GITHUB_API_BASE, GITHUB_DEFAULT_TIMEOUT_MS } from '../../common/github/github-api.client';
-import { GithubRepo } from '../../common/github/github-api.types';
 import { getErrorMessage } from '../../common/utils/error.util';
 
 interface GithubInstallationInfo {
