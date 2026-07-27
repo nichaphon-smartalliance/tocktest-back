@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Param, Query, Body, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Param, ParseUUIDPipe, Query, Body, UnauthorizedException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AnalysisService } from './analysis.service';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { WhatToTestDto } from './dto/what-to-test.dto';
+import { ParseCommitShaPipe } from '../../common/pipes/parse-commit-sha.pipe';
+import { ParsePositiveIntPipe } from '../../common/pipes/parse-positive-int.pipe';
 import { THROTTLE_AI, THROTTLE_EXTERNAL_WRITE } from '../../common/throttle.config';
 import type { User } from '../users/entities/user.entity';
 
@@ -15,7 +17,7 @@ export class AnalysisController {
   @Post(':repoId/commits/sync')
   syncCommits(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
     @Query('branch') branch?: string,
   ) {
     return this.service.syncCommitsFromGithub(user.id, repoId, branch);
@@ -24,7 +26,7 @@ export class AnalysisController {
   @Get(':repoId/commits')
   getCommits(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
     @Query() pagination: PaginationDto,
     @Query('fromDate') fromDate?: string,
     @Query('toDate') toDate?: string,
@@ -38,8 +40,8 @@ export class AnalysisController {
   @Post(':repoId/commits/:sha/analyze')
   analyzeCommit(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
-    @Param('sha') sha: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
+    @Param('sha', ParseCommitShaPipe) sha: string,
   ) {
     if (!user?.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
     return this.service.analyzeCommit(user.id, repoId, sha);
@@ -49,7 +51,7 @@ export class AnalysisController {
   @Post(':repoId/what-to-test')
   getWhatToTest(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
     @Body() dto: WhatToTestDto,
   ) {
     if (!user?.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
@@ -59,21 +61,21 @@ export class AnalysisController {
   @Post(':repoId/pull-requests/:pullRequestNumber/review')
   reviewPullRequest(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
-    @Param('pullRequestNumber') pullRequestNumber: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
+    @Param('pullRequestNumber', ParsePositiveIntPipe) pullRequestNumber: number,
   ) {
     if (!user?.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
-    return this.service.reviewPullRequest(user.id, repoId, Number(pullRequestNumber));
+    return this.service.reviewPullRequest(user.id, repoId, pullRequestNumber);
   }
 
   @Throttle(THROTTLE_EXTERNAL_WRITE)
   @Post(':repoId/pull-requests/:pullRequestNumber/review/comment')
   reviewAndCommentPullRequest(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
-    @Param('pullRequestNumber') pullRequestNumber: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
+    @Param('pullRequestNumber', ParsePositiveIntPipe) pullRequestNumber: number,
   ) {
     if (!user?.id) throw new UnauthorizedException('กรุณาเข้าสู่ระบบก่อน');
-    return this.service.reviewAndCommentPullRequest(user.id, repoId, Number(pullRequestNumber));
+    return this.service.reviewAndCommentPullRequest(user.id, repoId, pullRequestNumber);
   }
 }

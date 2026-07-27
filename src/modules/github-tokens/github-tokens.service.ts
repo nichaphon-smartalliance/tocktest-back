@@ -109,7 +109,9 @@ export class GithubTokensService {
   async handleOAuthCallback(code: string, state: string): Promise<{ userId: string; githubLogin: string }> {
     let payload: { userId: string; purpose: string };
     try {
-      payload = jwt.verify(state, this.config.get<string>('JWT_SECRET') as string) as unknown as typeof payload;
+      payload = jwt.verify(state, this.config.get<string>('JWT_SECRET') as string, {
+        algorithms: ['HS256'],
+      }) as unknown as typeof payload;
     } catch {
       throw new UnauthorizedException('GitHub connect link is invalid or expired.');
     }

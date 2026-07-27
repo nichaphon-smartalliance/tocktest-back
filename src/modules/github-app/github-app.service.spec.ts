@@ -6,12 +6,20 @@ import { GithubAppService } from './github-app.service';
 import { GithubInstallation } from './entities/github-installation.entity';
 import { Repository } from '../repositories/entities/repository.entity';
 import { GithubApiClient } from '../../common/github/github-api.client';
+import { GithubTokensService } from '../github-tokens/github-tokens.service';
 
 describe('GithubAppService', () => {
   let service: GithubAppService;
   let installationRepo: { findOne: jest.Mock; find: jest.Mock; upsert: jest.Mock };
   let repoRepo: { find: jest.Mock; upsert: jest.Mock };
-  let githubApi: { listInstallationRepositories: jest.Mock; getRepo: jest.Mock; postIssueComment: jest.Mock; postCommitStatus: jest.Mock };
+  let githubApi: {
+    listInstallationRepositories: jest.Mock;
+    listInstallationsForUser: jest.Mock;
+    getRepo: jest.Mock;
+    postIssueComment: jest.Mock;
+    postCommitStatus: jest.Mock;
+  };
+  let githubTokens: { getDecryptedToken: jest.Mock };
   let config: { get: jest.Mock };
 
   beforeEach(async () => {
@@ -19,10 +27,12 @@ describe('GithubAppService', () => {
     repoRepo = { find: jest.fn().mockResolvedValue([]), upsert: jest.fn() };
     githubApi = {
       listInstallationRepositories: jest.fn().mockResolvedValue([]),
+      listInstallationsForUser: jest.fn().mockResolvedValue([]),
       getRepo: jest.fn(),
       postIssueComment: jest.fn(),
       postCommitStatus: jest.fn(),
     };
+    githubTokens = { getDecryptedToken: jest.fn().mockResolvedValue('ghp_user_token') };
     config = {
       get: jest.fn((key: string) => {
         const values: Record<string, string> = {
@@ -42,6 +52,7 @@ describe('GithubAppService', () => {
         { provide: getRepositoryToken(GithubInstallation), useValue: installationRepo },
         { provide: getRepositoryToken(Repository), useValue: repoRepo },
         { provide: GithubApiClient, useValue: githubApi },
+        { provide: GithubTokensService, useValue: githubTokens },
       ],
     }).compile();
 

@@ -5,6 +5,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { User } from '../users/entities/user.entity';
 import { GithubAppService } from './github-app.service';
 import { ImportRepositoryDto } from './dto/import-repository.dto';
+import { resolveFrontendRedirectBase } from '../../common/utils/frontend-url.util';
 
 @Controller('api/v1/github-app')
 export class GithubAppController {
@@ -50,7 +51,7 @@ export class GithubAppController {
     @Query('state') state: string | undefined,
     @Res() res: Response,
   ) {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4003';
+    const frontendUrl = resolveFrontendRedirectBase();
     try {
       await this.githubAppService.handleInstallationCallback(installationId, setupAction, state);
       const params = new URLSearchParams({ github_app: setupAction ?? 'installed' });

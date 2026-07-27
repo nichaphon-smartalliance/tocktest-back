@@ -9,6 +9,13 @@ import { toPageResult } from '../../common/dto/pagination.dto';
 import { normalizeRiskLevel } from '../../common/utils/normalize-ai';
 import { buildPrReviewInput, formatPrReviewComment, reviewToCommitStatus } from '../../common/utils/pr-review.util';
 
+/** Returns a valid Date, or null for missing/unparseable input. */
+function parseDateParam(value?: string): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 @Injectable()
 export class AnalysisService {
   constructor(
@@ -78,8 +85,12 @@ export class AnalysisService {
     // Fallback: stored analyses (used when no branch selected or no PAT)
     const qb = this.commitRepo.createQueryBuilder('c').where('c.repoId = :repoId', { repoId });
     if (riskLevel) qb.andWhere('c.riskLevel = :riskLevel', { riskLevel });
-    if (params.fromDate) qb.andWhere('c.committedAt >= :from', { from: new Date(params.fromDate) });
-    if (params.toDate) qb.andWhere('c.committedAt <= :to', { to: new Date(params.toDate) });
+    // `new Date('garbage')` is an Invalid Date, which TypeORM happily forwards to
+    // Postgres and turns into a 500. Parse defensively and ignore unusable bounds.
+    const from = parseDateParam(params.fromDate);
+    const to = parseDateParam(params.toDate);
+    if (from) qb.andWhere('c.committedAt >= :from', { from });
+    if (to) qb.andWhere('c.committedAt <= :to', { to });
     qb.orderBy('c.committedAt', 'DESC').skip((page - 1) * pageSize).take(pageSize);
 
     const [items, total] = await qb.getManyAndCount();

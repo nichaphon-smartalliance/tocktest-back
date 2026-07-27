@@ -7,12 +7,14 @@ import {
   Param,
   Query,
   Res,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { GithubTokensService } from './github-tokens.service';
 import { CreateGithubTokenDto } from './dto/create-github-token.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { resolveFrontendRedirectBase } from '../../common/utils/frontend-url.util';
 import type { User } from '../users/entities/user.entity';
 
 @Controller('api/v1/github-tokens')
@@ -32,7 +34,7 @@ export class GithubTokensController {
     @Query('error') error: string,
     @Res() res: Response,
   ) {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:4003';
+    const frontendUrl = resolveFrontendRedirectBase();
     if (error || !code || !state) {
       return res.redirect(`${frontendUrl}/settings?github=error`);
     }
@@ -55,12 +57,12 @@ export class GithubTokensController {
   }
 
   @Delete(':id')
-  delete(@CurrentUser() user: User, @Param('id') id: string) {
+  delete(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.delete(user.id, id);
   }
 
   @Post(':id/test')
-  test(@CurrentUser() user: User, @Param('id') id: string) {
+  test(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.test(user.id, id);
   }
 }

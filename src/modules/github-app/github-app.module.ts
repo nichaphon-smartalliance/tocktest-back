@@ -5,9 +5,14 @@ import { GithubAppService } from './github-app.service';
 import { GithubInstallation } from './entities/github-installation.entity';
 import { Repository } from '../repositories/entities/repository.entity';
 import { GithubApiModule } from '../../common/github/github-api.module';
+import { GithubTokensModule } from '../github-tokens/github-tokens.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GithubInstallation, Repository]), GithubApiModule],
+  imports: [
+    TypeOrmModule.forFeature([GithubInstallation, Repository]),
+    GithubApiModule,
+    GithubTokensModule,
+  ],
   controllers: [GithubAppController],
   providers: [GithubAppService],
   exports: [GithubAppService],

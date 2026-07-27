@@ -6,9 +6,10 @@ import axios from 'axios';
 import * as jwt from 'jsonwebtoken';
 import { GithubInstallation } from './entities/github-installation.entity';
 import { Repository } from '../repositories/entities/repository.entity';
-import { isValidRepoFullName } from '../../common/utils/github.util';
+import { isValidNumericId, isValidRepoFullName } from '../../common/utils/github.util';
 import { GithubApiClient, GITHUB_API_BASE, GITHUB_DEFAULT_TIMEOUT_MS } from '../../common/github/github-api.client';
 import { getErrorMessage } from '../../common/utils/error.util';
+import { GithubTokensService } from '../github-tokens/github-tokens.service';
 
 interface GithubInstallationInfo {
   account?: { login?: string; type?: string };
@@ -26,6 +27,7 @@ export class GithubAppService {
     @InjectRepository(Repository)
     private readonly repoRepo: TypeOrmRepo<Repository>,
     private readonly githubApi: GithubApiClient,
+    private readonly githubTokensService: GithubTokensService,
   ) {}
 
   getSetupStatus() {
@@ -134,7 +136,9 @@ export class GithubAppService {
 
     if (state) {
       try {
-        const payload = jwt.verify(state, this.config.get<string>('JWT_SECRET') as string) as unknown as {
+        const payload = jwt.verify(state, this.config.get<string>('JWT_SECRET') as string, {
+          algorithms: ['HS256'],
+        }) as unknown as {
           userId: string;
           purpose: string;
         };
@@ -144,7 +148,31 @@ export class GithubAppService {
       }
     }
 
+    // `installation_id` is an unauthenticated, attacker-controlled query param on
+    // a @Public endpoint — a valid state token only proves WHO is calling, never
+    // that they own the installation they named. Everything below establishes
+    // that ownership before any row is written.
     if (userId && installationId && setupAction !== 'request') {
+      if (!isValidNumericId(installationId)) {
+        throw new BadRequestException('Invalid installation id');
+      }
+
+      // Refuse to re-point an installation that is already bound to someone else.
+      // Without this, upsert(conflictPaths: ['installationId']) silently transfers
+      // the victim's installation — and its access token — to the caller.
+      const existing = await this.installationRepo.findOne({ where: { installationId } });
+      if (existing && existing.userId !== userId) {
+        this.logger.warn(
+          `Rejected attempt to rebind GitHub App installation ${installationId} from user ${existing.userId} to ${userId}`,
+        );
+        throw new BadRequestException('This GitHub App installation is already linked to another account.');
+      }
+
+      // Prove the caller actually controls this installation by asking GitHub
+      // which installations THEIR OWN credential can see. Fails closed: if we
+      // can't verify, we don't bind.
+      await this.assertUserOwnsInstallation(userId, installationId);
+
       let info: GithubInstallationInfo | null = null;
       try {
         info = await this.fetchInstallationInfo(installationId);
@@ -167,6 +195,34 @@ export class GithubAppService {
     return { userId, installationId: installationId ?? null, setupAction: setupAction ?? null };
   }
 
+  /**
+   * Verifies via GitHub that `installationId` is one the user can actually
+   * access, using the user's own stored GitHub credential. Throws otherwise.
+   */
+  private async assertUserOwnsInstallation(userId: string, installationId: string): Promise<void> {
+    const userToken = await this.githubTokensService.getDecryptedToken(userId);
+    if (!userToken) {
+      throw new BadRequestException(
+        'Connect your GitHub account before linking a GitHub App installation.',
+      );
+    }
+
+    let installations: { id: number }[];
+    try {
+      installations = await this.githubApi.listInstallationsForUser(userToken);
+    } catch (err: unknown) {
+      this.logger.warn(`Could not list installations for user ${userId}: ${getErrorMessage(err)}`);
+      throw new BadRequestException('Could not verify this GitHub App installation. Please try again.');
+    }
+
+    if (!installations.some((item) => String(item.id) === installationId)) {
+      this.logger.warn(
+        `User ${userId} attempted to link GitHub App installation ${installationId} they cannot access`,
+      );
+      throw new BadRequestException('This GitHub App installation is not accessible from your GitHub account.');
+    }
+  }
+
   // --- GitHub App auth & writeback ---------------------------------------
 
   private generateAppJwt(): string {
@@ -185,17 +241,26 @@ export class GithubAppService {
   // raw axios — but share the client's base URL/timeout constants.
   private async fetchInstallationInfo(installationId: string): Promise<GithubInstallationInfo> {
     const appJwt = this.generateAppJwt();
-    const res = await axios.get<GithubInstallationInfo>(`${GITHUB_API_BASE}/app/installations/${installationId}`, {
+    const id = this.assertInstallationIdFormat(installationId);
+    const res = await axios.get<GithubInstallationInfo>(`${GITHUB_API_BASE}/app/installations/${id}`, {
       headers: { Authorization: `Bearer ${appJwt}`, Accept: 'application/vnd.github+json' },
       timeout: GITHUB_DEFAULT_TIMEOUT_MS,
     });
     return res.data;
   }
 
+  private assertInstallationIdFormat(installationId: string): string {
+    if (!isValidNumericId(installationId)) {
+      throw new BadRequestException('Invalid installation id');
+    }
+    return installationId;
+  }
+
   async getInstallationToken(installationId: string): Promise<string> {
     const appJwt = this.generateAppJwt();
+    const id = this.assertInstallationIdFormat(installationId);
     const res = await axios.post<{ token: string }>(
-      `${GITHUB_API_BASE}/app/installations/${installationId}/access_tokens`,
+      `${GITHUB_API_BASE}/app/installations/${id}/access_tokens`,
       {},
       { headers: { Authorization: `Bearer ${appJwt}`, Accept: 'application/vnd.github+json' }, timeout: GITHUB_DEFAULT_TIMEOUT_MS },
     );

@@ -1,5 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import axios from 'axios';
+import {
+  encodeRepoPath,
+  isValidCommitSha,
+  isValidGitRef,
+  isValidNumericId,
+  isValidRepoFullName,
+} from '../utils/github.util';
 import {
   GithubBranch,
   GithubCommit,
@@ -21,6 +28,42 @@ const PAGE_SIZE = 100;
 
 function tokenHeaders(token: string, accept = 'application/vnd.github+json') {
   return { Authorization: `token ${token}`, Accept: accept };
+}
+
+// ── URL-segment guards ──────────────────────────────────────────────────────
+// Every value interpolated into a GitHub API path is validated HERE rather than
+// (only) at the controller/DTO layer. This is the single choke point every
+// caller funnels through, so a new caller cannot reintroduce path traversal by
+// forgetting a DTO constraint. Failures are BadRequest, never a silent request
+// to an unintended endpoint.
+
+function assertRepoFullName(fullName: string): string {
+  if (!isValidRepoFullName(fullName)) {
+    throw new BadRequestException('Invalid repository name');
+  }
+  return fullName;
+}
+
+function assertCommitSha(sha: string): string {
+  if (!isValidCommitSha(sha)) {
+    throw new BadRequestException('Invalid commit SHA');
+  }
+  return sha;
+}
+
+function assertGitRef(ref: string): string {
+  if (!isValidGitRef(ref)) {
+    throw new BadRequestException('Invalid git ref');
+  }
+  return ref;
+}
+
+function assertNumericId(value: number | string, label: string): string {
+  const asString = String(value);
+  if (!isValidNumericId(asString)) {
+    throw new BadRequestException(`Invalid ${label}`);
+  }
+  return asString;
 }
 
 /**
@@ -61,7 +104,7 @@ export class GithubApiClient {
   }
 
   async listBranches(fullName: string, token: string, page: number, perPage = PAGE_SIZE): Promise<GithubBranch[]> {
-    const res = await axios.get<GithubBranch[]>(`${GITHUB_API_BASE}/repos/${fullName}/branches`, {
+    const res = await axios.get<GithubBranch[]>(`${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/branches`, {
       headers: tokenHeaders(token),
       params: { per_page: perPage, page },
       timeout: GITHUB_DEFAULT_TIMEOUT_MS,
@@ -84,7 +127,7 @@ export class GithubApiClient {
 
   async getBranch(fullName: string, branch: string, token: string): Promise<GithubBranch> {
     const res = await axios.get<GithubBranch>(
-      `${GITHUB_API_BASE}/repos/${fullName}/branches/${encodeURIComponent(branch)}`,
+      `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/branches/${encodeURIComponent(assertGitRef(branch))}`,
       { headers: tokenHeaders(token), timeout: GITHUB_DEFAULT_TIMEOUT_MS },
     );
     return res.data;
@@ -95,7 +138,7 @@ export class GithubApiClient {
     token: string,
     params: { since?: string; until?: string; sha?: string; per_page?: number; page?: number } = {},
   ): Promise<GithubCommit[]> {
-    const res = await axios.get<GithubCommit[]>(`${GITHUB_API_BASE}/repos/${fullName}/commits`, {
+    const res = await axios.get<GithubCommit[]>(`${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/commits`, {
       headers: tokenHeaders(token),
       params,
       timeout: GITHUB_DEFAULT_TIMEOUT_MS,
@@ -104,7 +147,8 @@ export class GithubApiClient {
   }
 
   async getCommit(fullName: string, sha: string, token: string): Promise<GithubCommit> {
-    const res = await axios.get<GithubCommit>(`${GITHUB_API_BASE}/repos/${fullName}/commits/${sha}`, {
+    const url = `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/commits/${assertCommitSha(sha)}`;
+    const res = await axios.get<GithubCommit>(url, {
       headers: tokenHeaders(token),
       timeout: GITHUB_DEFAULT_TIMEOUT_MS,
     });
@@ -113,7 +157,8 @@ export class GithubApiClient {
 
   /** Same endpoint as getCommit, requested as a unified diff instead of JSON. */
   async getCommitDiff(fullName: string, sha: string, token: string): Promise<string> {
-    const res = await axios.get<string>(`${GITHUB_API_BASE}/repos/${fullName}/commits/${sha}`, {
+    const url = `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/commits/${assertCommitSha(sha)}`;
+    const res = await axios.get<string>(url, {
       headers: tokenHeaders(token, 'application/vnd.github.v3.diff'),
       timeout: GITHUB_DEFAULT_TIMEOUT_MS,
     });
@@ -121,15 +166,17 @@ export class GithubApiClient {
   }
 
   async compareCommits(fullName: string, base: string, head: string, token: string): Promise<GithubCompareResult> {
+    const range = `${assertGitRef(base)}...${assertGitRef(head)}`;
     const res = await axios.get<GithubCompareResult>(
-      `${GITHUB_API_BASE}/repos/${fullName}/compare/${base}...${head}`,
+      `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/compare/${range}`,
       { headers: tokenHeaders(token), timeout: GITHUB_LONG_TIMEOUT_MS },
     );
     return res.data;
   }
 
   async getTree(fullName: string, treeSha: string, token: string, recursive = true): Promise<GithubTree> {
-    const res = await axios.get<GithubTree>(`${GITHUB_API_BASE}/repos/${fullName}/git/trees/${treeSha}`, {
+    const url = `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/git/trees/${assertCommitSha(treeSha)}`;
+    const res = await axios.get<GithubTree>(url, {
       headers: tokenHeaders(token),
       params: recursive ? { recursive: 1 } : undefined,
       timeout: GITHUB_LONG_TIMEOUT_MS,
@@ -138,8 +185,10 @@ export class GithubApiClient {
   }
 
   async getFileContent(fullName: string, path: string, token: string, ref?: string): Promise<GithubContent> {
+    // `path` comes from the repo's own git tree and may contain characters that
+    // are legal in a filename but structural in a URL — encode it per segment.
     const res = await axios.get<GithubContent>(
-      `${GITHUB_API_BASE}/repos/${fullName}/contents/${path}`,
+      `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/contents/${encodeRepoPath(path)}`,
       { headers: tokenHeaders(token), params: ref ? { ref } : undefined, timeout: GITHUB_LONG_TIMEOUT_MS },
     );
     return res.data;
@@ -157,7 +206,8 @@ export class GithubApiClient {
   }
 
   async getPullRequest(fullName: string, prNumber: number, token: string): Promise<GithubPullRequest> {
-    const res = await axios.get<GithubPullRequest>(`${GITHUB_API_BASE}/repos/${fullName}/pulls/${prNumber}`, {
+    const url = `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/pulls/${assertNumericId(prNumber, 'pull request number')}`;
+    const res = await axios.get<GithubPullRequest>(url, {
       headers: tokenHeaders(token),
       timeout: GITHUB_DEFAULT_TIMEOUT_MS,
     });
@@ -165,10 +215,12 @@ export class GithubApiClient {
   }
 
   async getPullRequestFiles(fullName: string, prNumber: number, token: string, perPage = 50) {
-    const res = await axios.get<NonNullable<GithubPullRequest['files']>>(
-      `${GITHUB_API_BASE}/repos/${fullName}/pulls/${prNumber}/files`,
-      { headers: tokenHeaders(token), params: { per_page: perPage }, timeout: GITHUB_DEFAULT_TIMEOUT_MS },
-    );
+    const url = `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/pulls/${assertNumericId(prNumber, 'pull request number')}/files`;
+    const res = await axios.get<NonNullable<GithubPullRequest['files']>>(url, {
+      headers: tokenHeaders(token),
+      params: { per_page: perPage },
+      timeout: GITHUB_DEFAULT_TIMEOUT_MS,
+    });
     return res.data;
   }
 
@@ -182,11 +234,8 @@ export class GithubApiClient {
   }
 
   async postIssueComment(fullName: string, issueNumber: number, body: string, token: string): Promise<void> {
-    await axios.post(
-      `${GITHUB_API_BASE}/repos/${fullName}/issues/${issueNumber}/comments`,
-      { body },
-      { headers: tokenHeaders(token), timeout: GITHUB_DEFAULT_TIMEOUT_MS },
-    );
+    const url = `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/issues/${assertNumericId(issueNumber, 'issue number')}/comments`;
+    await axios.post(url, { body }, { headers: tokenHeaders(token), timeout: GITHUB_DEFAULT_TIMEOUT_MS });
   }
 
   async postCommitStatus(
@@ -198,14 +247,14 @@ export class GithubApiClient {
     context = 'tocktest/ai-review',
   ): Promise<void> {
     await axios.post(
-      `${GITHUB_API_BASE}/repos/${fullName}/statuses/${sha}`,
+      `${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}/statuses/${assertCommitSha(sha)}`,
       { state, description: description.slice(0, 140), context },
       { headers: tokenHeaders(token), timeout: GITHUB_DEFAULT_TIMEOUT_MS },
     );
   }
 
   async getRepo(fullName: string, token: string): Promise<GithubRepo> {
-    const res = await axios.get<GithubRepo>(`${GITHUB_API_BASE}/repos/${fullName}`, {
+    const res = await axios.get<GithubRepo>(`${GITHUB_API_BASE}/repos/${assertRepoFullName(fullName)}`, {
       headers: tokenHeaders(token),
       timeout: GITHUB_DEFAULT_TIMEOUT_MS,
     });
@@ -219,6 +268,49 @@ export class GithubApiClient {
       { headers: tokenHeaders(token), params: { per_page: perPage }, timeout: GITHUB_DEFAULT_TIMEOUT_MS },
     );
     return res.data?.repositories ?? [];
+  }
+
+  /**
+   * Asks GitHub whether `accessToken` was issued to THIS OAuth app.
+   *
+   * `GET /user` accepts any valid GitHub token from any app, so it proves only
+   * that a token is live — never that it was minted for us. Without this check a
+   * token leaked from (or phished by) an unrelated OAuth app can be replayed at
+   * /auth/github to log in as its owner. Returns false on any non-200.
+   */
+  async checkOAuthTokenBelongsToApp(
+    clientId: string,
+    clientSecret: string,
+    accessToken: string,
+  ): Promise<boolean> {
+    try {
+      const res = await axios.post(
+        `${GITHUB_API_BASE}/applications/${encodeURIComponent(clientId)}/token`,
+        { access_token: accessToken },
+        {
+          auth: { username: clientId, password: clientSecret },
+          headers: { Accept: 'application/vnd.github+json' },
+          timeout: GITHUB_DEFAULT_TIMEOUT_MS,
+          validateStatus: () => true,
+        },
+      );
+      return res.status === 200;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Installations of this GitHub App that the *token holder* can access.
+   * Used to prove a user actually controls an installation before the backend
+   * binds it to their account (see GithubAppService.handleInstallationCallback).
+   */
+  async listInstallationsForUser(token: string, perPage = PAGE_SIZE): Promise<{ id: number }[]> {
+    const res = await axios.get<{ installations?: { id: number }[] }>(
+      `${GITHUB_API_BASE}/user/installations`,
+      { headers: tokenHeaders(token), params: { per_page: perPage }, timeout: GITHUB_DEFAULT_TIMEOUT_MS },
+    );
+    return res.data?.installations ?? [];
   }
 
   async getUser(token: string): Promise<GithubUser> {

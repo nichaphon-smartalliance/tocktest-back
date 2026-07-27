@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
@@ -18,6 +19,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly githubApi: GithubApiClient,
+    private readonly config: ConfigService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -37,6 +39,7 @@ export class AuthService {
   }
 
   async loginWithGithub(dto: GithubLoginDto) {
+    await this.assertTokenIssuedToThisApp(dto.accessToken);
     const profile = await this.fetchGithubProfile(dto.accessToken);
     const user = await this.usersService.upsertGithubUser({
       githubId: profile.id,
@@ -49,6 +52,32 @@ export class AuthService {
       throw new UnauthorizedException('This account is disabled');
     }
     return this.buildSession(user);
+  }
+
+  /**
+   * A GitHub access token is a bearer credential, not proof of intent to sign in
+   * *here*: `GET /user` validates any live token from any OAuth app. Confirm with
+   * GitHub that this token was issued to our own client_id before minting a
+   * session from it, otherwise a token leaked from an unrelated app is enough to
+   * impersonate its owner.
+   */
+  private async assertTokenIssuedToThisApp(accessToken: string): Promise<void> {
+    const clientId = this.config.get<string>('GITHUB_OAUTH_CLIENT_ID');
+    const clientSecret = this.config.get<string>('GITHUB_OAUTH_CLIENT_SECRET');
+
+    if (!clientId || !clientSecret) {
+      // Fail closed: without app credentials the token's audience is unverifiable.
+      throw new UnauthorizedException('GitHub sign-in is not configured on this server.');
+    }
+
+    const belongsToApp = await this.githubApi.checkOAuthTokenBelongsToApp(
+      clientId,
+      clientSecret,
+      accessToken,
+    );
+    if (!belongsToApp) {
+      throw new UnauthorizedException('GitHub authentication failed');
+    }
   }
 
   private async fetchGithubProfile(accessToken: string) {

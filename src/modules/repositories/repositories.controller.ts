@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { RepositoriesService } from './repositories.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -23,12 +25,12 @@ export class RepositoriesController {
   }
 
   @Get(':id')
-  findOne(@CurrentUser() user: User, @Param('id') id: string) {
+  findOne(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.findOne(user.id, id);
   }
 
   @Get(':id/branches')
-  getBranches(@CurrentUser() user: User, @Param('id') id: string) {
+  getBranches(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.getBranches(user.id, id);
   }
 }

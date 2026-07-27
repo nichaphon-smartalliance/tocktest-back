@@ -1,4 +1,6 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, Param, Post,
+  ParseUUIDPipe,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ChatbotService } from './chatbot.service';
 import { ChatRequestDto } from './dto/chat.dto';
@@ -14,7 +16,7 @@ export class ChatbotController {
   @Post(':repoId/chat')
   chat(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
     @Body() dto: ChatRequestDto,
   ) {
     return this.chatbotService.chat(user.id, repoId, dto);

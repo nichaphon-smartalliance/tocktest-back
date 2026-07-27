@@ -7,6 +7,7 @@ import {
   Param,
   Body,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { TestCasesService } from './test-cases.service';
 import { CreateTestCaseDto, UpdateTestCaseDto, BulkSaveTestCasesDto } from './dto/create-test-case.dto';
@@ -22,14 +23,14 @@ export class TestCasesController {
   // ── Folders ───────────────────────────────────────────────────────────
 
   @Get(':repoId/folders')
-  getFolders(@CurrentUser() user: User, @Param('repoId') repoId: string) {
+  getFolders(@CurrentUser() user: User, @Param('repoId', ParseUUIDPipe) repoId: string) {
     return this.service.getFolders(user.id, repoId);
   }
 
   @Post(':repoId/folders')
   createFolder(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
     @Body() dto: CreateFolderDto,
   ) {
     return this.service.createFolder(user.id, repoId, dto);
@@ -38,8 +39,8 @@ export class TestCasesController {
   @Put(':repoId/folders/:folderId')
   updateFolder(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
-    @Param('folderId') folderId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
+    @Param('folderId', ParseUUIDPipe) folderId: string,
     @Body() dto: UpdateFolderDto,
   ) {
     return this.service.updateFolder(user.id, repoId, folderId, dto);
@@ -48,8 +49,8 @@ export class TestCasesController {
   @Delete(':repoId/folders/:folderId')
   deleteFolder(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
-    @Param('folderId') folderId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
+    @Param('folderId', ParseUUIDPipe) folderId: string,
   ) {
     return this.service.deleteFolder(user.id, repoId, folderId);
   }
@@ -59,7 +60,7 @@ export class TestCasesController {
   @Post(':repoId/test-cases/bulk')
   bulkSave(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
     @Body() dto: BulkSaveTestCasesDto,
   ) {
     return this.service.bulkSave(user.id, repoId, dto);
@@ -68,7 +69,7 @@ export class TestCasesController {
   @Get(':repoId/test-cases')
   findAll(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
     @Query() pagination: PaginationDto,
     @Query('folderId') folderId?: string,
     @Query('status') status?: string,
@@ -82,8 +83,8 @@ export class TestCasesController {
   @Get(':repoId/test-cases/:id')
   findOne(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
-    @Param('id') id: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.service.findOne(user.id, repoId, id);
   }
@@ -91,7 +92,7 @@ export class TestCasesController {
   @Post(':repoId/test-cases')
   create(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
     @Body() dto: CreateTestCaseDto,
   ) {
     return this.service.create(user.id, repoId, dto);
@@ -100,8 +101,8 @@ export class TestCasesController {
   @Put(':repoId/test-cases/:id')
   update(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
-    @Param('id') id: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTestCaseDto,
   ) {
     return this.service.update(user.id, repoId, id, dto);
@@ -110,8 +111,8 @@ export class TestCasesController {
   @Delete(':repoId/test-cases/:id')
   delete(
     @CurrentUser() user: User,
-    @Param('repoId') repoId: string,
-    @Param('id') id: string,
+    @Param('repoId', ParseUUIDPipe) repoId: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.service.delete(user.id, repoId, id);
   }

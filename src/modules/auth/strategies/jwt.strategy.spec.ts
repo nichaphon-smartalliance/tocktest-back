@@ -53,4 +53,17 @@ describe('JwtStrategy.validate', () => {
     usersService.findById.mockResolvedValue({ ...mockUser, sessionVersion: 1 });
     await expect(strategy.validate({ sub: 'u1', email: '', role: '' })).rejects.toThrow(UnauthorizedException);
   });
+
+  // Regression: JWT_SECRET also signs OAuth/App-install *state* tokens whose
+  // payload carries `userId`, not `sub`. Such a token must never authenticate a
+  // session — and must never reach findById() with an empty id, which TypeORM
+  // would drop from the WHERE clause and match an arbitrary active user.
+  it.each([
+    ['sub missing (state token shape)', { userId: 'victim', purpose: 'github-oauth' }],
+    ['sub empty string', { sub: '', email: '', role: '' }],
+    ['sub non-string', { sub: 123 as unknown as string, email: '', role: '' }],
+  ])('rejects a token without a valid subject: %s', async (_label, payload) => {
+    await expect(strategy.validate(payload as never)).rejects.toThrow(UnauthorizedException);
+    expect(usersService.findById).not.toHaveBeenCalled();
+  });
 });

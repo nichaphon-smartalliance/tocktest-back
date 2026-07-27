@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import axios from 'axios';
@@ -41,10 +42,27 @@ describe('AuthService', () => {
         // Real instance (no deps of its own) — tests below still intercept its
         // underlying axios.get calls via jest.spyOn(axios, 'get').
         GithubApiClient,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) =>
+              key === 'GITHUB_OAUTH_CLIENT_ID'
+                ? 'test-client-id'
+                : key === 'GITHUB_OAUTH_CLIENT_SECRET'
+                  ? 'test-client-secret'
+                  : undefined,
+            ),
+          },
+        },
       ],
     }).compile();
 
     service = module.get(AuthService);
+
+    // loginWithGithub now first confirms with GitHub that the presented token was
+    // issued to THIS OAuth app. Default to "yes" so the existing cases exercise
+    // the behaviour they were written for; the audience check has its own tests.
+    jest.spyOn(module.get(GithubApiClient), 'checkOAuthTokenBelongsToApp').mockResolvedValue(true);
   });
 
   // ── login ──────────────────────────────────────────────────────────────────
@@ -178,6 +196,34 @@ describe('AuthService', () => {
 
       expect(usersService.upsertGithubUser).toHaveBeenCalledWith(
         expect.objectContaining({ email: 'primary@example.com' }),
+      );
+    });
+
+    // Regression: a GitHub access token is a bearer credential accepted by
+    // `GET /user` regardless of which OAuth app minted it. Without an audience
+    // check, a token leaked from an unrelated app logs in as its owner here.
+    it('rejects a token that was not issued to this OAuth app', async () => {
+      const client = (service as unknown as { githubApi: GithubApiClient }).githubApi;
+      const audienceSpy = jest
+        .spyOn(client, 'checkOAuthTokenBelongsToApp')
+        .mockResolvedValue(false);
+      const profileSpy = jest.spyOn(axios, 'get');
+
+      await expect(service.loginWithGithub({ accessToken: 'gho_from_other_app' })).rejects.toThrow(
+        new UnauthorizedException('GitHub authentication failed'),
+      );
+
+      // Fails closed BEFORE the profile is ever fetched.
+      expect(profileSpy).not.toHaveBeenCalled();
+      audienceSpy.mockRestore();
+    });
+
+    it('fails closed when the server has no OAuth app credentials configured', async () => {
+      const noConfig = (service as unknown as { config: { get: jest.Mock } }).config;
+      noConfig.get.mockReturnValue(undefined);
+
+      await expect(service.loginWithGithub({ accessToken: 'gho_valid' })).rejects.toThrow(
+        UnauthorizedException,
       );
     });
   });

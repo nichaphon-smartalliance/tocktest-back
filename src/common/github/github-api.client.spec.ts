@@ -66,7 +66,7 @@ describe('GithubApiClient', () => {
     it('truncates the description to 140 characters', async () => {
       mockedAxios.post.mockResolvedValueOnce({ data: {} });
       const longDescription = 'x'.repeat(200);
-      await client.postCommitStatus('owner/repo', 'sha1', 'success', longDescription, 'token');
+      await client.postCommitStatus('owner/repo', 'a1b2c3d', 'success', longDescription, 'token');
 
       const body = mockedAxios.post.mock.calls[0][1] as { description: string };
       expect(body.description).toHaveLength(140);

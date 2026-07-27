@@ -64,7 +64,9 @@ ${langDirective}`;
     const parts: string[] = [`Repo: ${fullName}`];
 
     try {
-      const doc = await this.docRepo.findOne({ where: { repoId } });
+      // Docs are append-only versions; without an explicit order this returns an
+      // arbitrary (in practice, the oldest) revision as chat context.
+      const doc = await this.docRepo.findOne({ where: { repoId }, order: { version: 'DESC' } });
       if (doc?.content) {
         parts.push(`\n## Project Documentation\n${doc.content.slice(0, 2000)}`);
       }
